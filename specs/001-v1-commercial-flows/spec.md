@@ -16,6 +16,9 @@ administração do catálogo e CRM inicial para a Laumiley Modas.
 - Q: A senha é obrigatória também no cadastro de cliente pelo Google? → A: Não. A senha é obrigatória somente no
   cadastro tradicional; no cadastro Google, a identidade validada pelo provedor substitui a senha local, mantendo a
   coleta dos demais dados obrigatórios do cliente.
+- Q: Existem lembretes criados ou concluídos manualmente na V1? → A: Não. Todo `Reminder` é criado automaticamente com
+  um `ContactRecord` pendente após um `Interest` confirmado e só é concluído quando a administradora completa e finaliza
+  o `ContactRecord` correspondente.
 
 ## User Scenarios & Testing
 
@@ -123,17 +126,17 @@ verificando que apenas a administradora acessa seu contexto comercial.
 
 ---
 
-### User Story 5 - Registrar contatos e lembretes (Priority: P3)
+### User Story 5 - Registrar contatos e acompanhar atendimentos (Priority: P3)
 
 Como administradora, quero registrar contatos realizados, completar registros pendentes originados por interesses e
-acompanhar ações futuras de relacionamento com um cliente, para manter o histórico sem presumir que todo redirecionamento
+acompanhar os atendimentos iniciados por clientes, para manter o histórico sem presumir que todo redirecionamento
 ao WhatsApp resultou em conversa.
 
-**Why this priority**: Histórico e lembretes ampliam o valor da base de clientes, mas dependem da identificação dos
-clientes e do contexto comercial já registrado.
+**Why this priority**: Histórico e acompanhamento ampliam o valor da base de clientes, mas dependem da identificação dos
+clientes, do interesse confirmado e do contexto comercial já registrado.
 
-**Independent Test**: Pode ser testado selecionando um cliente, registrando um contato manual e um lembrete, gerando um
-interesse com acompanhamento automático e completando o `ContactRecord` pendente após o atendimento.
+**Independent Test**: Pode ser testado registrando um contato manual, gerando um interesse com `Reminder` e
+`ContactRecord` pendente automáticos e completando o `ContactRecord` após o atendimento, verificando a conclusão conjunta.
 
 **Acceptance Scenarios**:
 
@@ -141,26 +144,21 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
    **Then** ela passa a constar no histórico desse cliente.
 2. **Given** que existem múltiplas interações, **When** a administradora consulta o histórico, **Then** consegue
    compreender sua sequência cronológica.
-3. **Given** que a administradora pretende realizar uma ação futura, **When** registra um lembrete com descrição e data
-   prevista, **Then** ele fica associado ao cliente como pendente.
-4. **Given** que um lembrete pendente ultrapassou sua data prevista, **When** a administradora consulta os lembretes,
+3. **Given** que um lembrete de acompanhamento ultrapassou sua data prevista, **When** a administradora consulta os lembretes,
    **Then** ele continua pendente e é identificado como vencido.
-5. **Given** que um lembrete manual foi atendido, **When** a administradora o conclui, **Then** ele deixa de aparecer
-   como pendente sem perder o contexto do relacionamento.
-6. **Given** que um cliente autorizou contatos comerciais proativos, **When** a administradora consulta seu contexto,
+4. **Given** que um cliente autorizou contatos comerciais proativos, **When** a administradora consulta seu contexto,
    **Then** consegue verificar que a autorização está vigente antes de planejar o contato.
-7. **Given** que um cliente retirou a autorização, **When** a administradora consulta seu contexto ou seus lembretes,
-   **Then** o cliente não é apresentado como elegível para novo contato proativo e os lembretes dessa finalidade são
-   identificados como não acionáveis.
-8. **Given** que um cliente possui autorização vigente para contatos comerciais proativos, **When** ele retira essa
+5. **Given** que um cliente retirou a autorização, **When** a administradora consulta seu contexto,
+   **Then** o cliente não é apresentado como elegível para novo contato proativo.
+6. **Given** que um cliente possui autorização vigente para contatos comerciais proativos, **When** ele retira essa
    autorização, **Then** o sistema registra a retirada e o cliente deixa de ser elegível para novos contatos proativos,
    sem impedir atendimentos iniciados por ele próprio.
-9. **Given** que o cliente foi encaminhado ao WhatsApp, **When** ainda não há confirmação de que ocorreu uma conversa,
+7. **Given** que o cliente foi encaminhado ao WhatsApp, **When** ainda não há confirmação de que ocorreu uma conversa,
    **Then** o `ContactRecord` automático permanece pendente e não é apresentado como contato realizado.
-10. **Given** que a administradora realizou o atendimento relacionado a um interesse, **When** completa as informações
+8. **Given** que a administradora realizou o atendimento relacionado a um interesse, **When** completa as informações
     do `ContactRecord` pendente e o conclui, **Then** o registro passa a compor o histórico e o lembrete associado é
     concluído na mesma ação.
-11. **Given** que o cliente não autorizou ou revogou contatos comerciais proativos, **When** existe um lembrete criado a
+9. **Given** que o cliente não autorizou ou revogou contatos comerciais proativos, **When** existe um lembrete criado a
     partir de interesse iniciado por ele, **Then** esse lembrete continua acionável para acompanhamento do atendimento
     solicitado.
 
@@ -181,8 +179,8 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
 * Se não houver clientes, contatos, interesses ou lembretes, a área correspondente deve apresentar um estado vazio
   compreensível.
 * Um lembrete vencido não deve desaparecer ou ser concluído automaticamente.
-* Se o cliente retirar a autorização para contatos proativos, lembretes pendentes dessa finalidade devem ser
-  identificados como não acionáveis, sem apagar contatos históricos nem impedir o atendimento solicitado pelo cliente.
+* Se o cliente retirar a autorização para contatos proativos, os lembretes originados por interesses confirmados
+  continuam acionáveis, sem apagar contatos históricos nem impedir o atendimento solicitado pelo cliente.
 * Tentativas de acesso de clientes ou visitantes às informações administrativas devem ser negadas sem revelar conteúdo
   protegido.
 
@@ -280,14 +278,14 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
 
 #### Lembretes
 
-* **FR-050**: A administradora DEVE conseguir registrar um lembrete de ação futura relacionado a um cliente.
-* **FR-051**: Cada lembrete DEVE conter, no mínimo, uma descrição da ação e a data prevista para sua realização.
+* **FR-050**: A V1 NÃO DEVE permitir criar um `Reminder` independentemente de um `Interest` confirmado.
+* **FR-051**: Cada lembrete automático DEVE conter, no mínimo, uma descrição da ação e a data prevista para sua realização.
 * **FR-052**: Um lembrete DEVE possuir estado que permita distinguir pelo menos `pendente` e `concluído`.
 * **FR-053**: A administradora DEVE conseguir consultar os lembretes pendentes.
 * **FR-054**: Um lembrete pendente cuja data prevista tenha passado DEVE ser identificado como vencido sem que seu
   estado seja automaticamente alterado.
-* **FR-055**: A administradora DEVE conseguir marcar um lembrete manual como concluído; o lembrete automático associado
-  a um interesse DEVE ser concluído pelo fluxo de conclusão do `ContactRecord` correspondente.
+* **FR-055**: Um lembrete NÃO DEVE possuir fluxo de conclusão manual independente; ele DEVE ser concluído somente quando
+  a administradora completar e finalizar o `ContactRecord` correspondente.
 * **FR-056**: A conclusão de um lembrete NÃO DEVE apagar o registro necessário para preservar o contexto do
   relacionamento.
 * **FR-057**: Um lembrete vencido NÃO DEVE ser ocultado automaticamente enquanto permanecer pendente.
@@ -310,8 +308,8 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
   vigente.
 * **FR-066**: Clientes sem autorização vigente NÃO DEVEM ser apresentados como elegíveis para novos contatos comerciais
   proativos.
-* **FR-067**: Quando uma autorização for retirada, lembretes pendentes destinados a contato proativo DEVEM ser
-  identificados como não acionáveis, sem apagar o histórico de contatos ou impedir atendimentos iniciados pelo cliente.
+* **FR-067**: Quando uma autorização for retirada, o cliente DEVE deixar de ser elegível para novos contatos proativos,
+  sem apagar o histórico nem alterar a acionabilidade dos lembretes originados por interesses confirmados.
 
 #### Acompanhamento automático do interesse
 
@@ -356,9 +354,11 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
   respectivos produtos.
 * **SC-011**: Um contato registrado aparece no histórico do cliente correto com data, canal e descrição, preservando a
   sequência das interações.
-* **SC-012**: Um lembrete criado permanece pendente até ser concluído manualmente pela administradora.
+* **SC-012**: Todo `Reminder` criado automaticamente permanece pendente até que a administradora complete e finalize o
+  `ContactRecord` correspondente, quando ambos são concluídos na mesma ação.
 * **SC-013**: Um lembrete pendente cuja data prevista tenha passado continua visível e é identificado como vencido.
-* **SC-014**: A conclusão de um lembrete remove seu estado pendente sem apagar o contexto necessário do relacionamento.
+* **SC-014**: A conclusão conjunta do `ContactRecord` e do lembrete remove seus estados pendentes sem apagar o contexto
+  necessário do relacionamento.
 * **SC-015**: Nenhum fluxo da V1 permite checkout, pagamento ou conclusão da venda dentro da aplicação.
 * **SC-016**: O catálogo não apresenta preço, estoque ou tamanhos como informações controladas pela aplicação.
 * **SC-017**: Falhas em autenticação, imagens ou encaminhamento ao WhatsApp não produzem interesses duplicados nem
@@ -367,8 +367,8 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
   cliente não autoriza contatos comerciais proativos.
 * **SC-019**: Nenhum cliente sem autorização vigente é apresentado à administradora como elegível para novo contato
   comercial proativo.
-* **SC-020**: A retirada da autorização torna não acionáveis os lembretes pendentes de contato proativo sem apagar o
-  histórico comercial do cliente.
+* **SC-020**: A retirada da autorização remove a elegibilidade para novos contatos proativos sem apagar o histórico nem
+  tornar não acionáveis os lembretes originados por interesses confirmados.
 * **SC-021**: Cada novo interesse confirmado com encaminhamento ao WhatsApp produz exatamente um lembrete interno e um
   `ContactRecord` pendente com canal, data, cliente, identificador do cliente e produto corretos.
 * **SC-022**: Repetir a mesma confirmação de interesse não aumenta a quantidade de interesses, lembretes ou
@@ -394,12 +394,12 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
   cria apenas o `ContactRecord` pendente que aguarda confirmação e complementação do atendimento.
 * Os interesses originados pelo catálogo são registrados automaticamente pelo fluxo correspondente e ficam disponíveis
   no contexto do cliente.
-* Lembretes gerais são criados e concluídos manualmente; o lembrete de acompanhamento do interesse é criado
-  automaticamente e concluído quando a administradora conclui o `ContactRecord` associado.
+* Todo `Reminder` da V1 é criado automaticamente a partir de um `Interest` confirmado, junto de um `ContactRecord`
+  pendente, e é concluído somente quando a administradora completa e finaliza esse registro associado.
 * A V1 não envia notificações ou mensagens automáticas aos clientes.
 * A autorização para contatos comerciais proativos é distinta do atendimento solicitado pelo cliente ao demonstrar
   interesse em um produto.
-* Um lembrete vencido continua sendo funcionalmente um lembrete pendente até sua conclusão manual.
+* Um lembrete vencido continua sendo funcionalmente um lembrete pendente até a conclusão do `ContactRecord` associado.
 * O funcionamento do encaminhamento depende da disponibilidade do WhatsApp no dispositivo ou navegador do cliente.
 * A gestão técnica do armazenamento das imagens segue a Constitution e não redefine o comportamento funcional descrito
   nesta especificação.
