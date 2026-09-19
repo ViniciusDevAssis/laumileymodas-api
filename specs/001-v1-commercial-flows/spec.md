@@ -10,6 +10,9 @@ administração do catálogo e CRM inicial para a Laumiley Modas.
 
 - Q: Na V1, quando a administradora poderá iniciar um contato comercial com um cliente? → A: Também para contatos
   comerciais proativos, desde que o cliente tenha autorizado e possa retirar a autorização.
+- Q: O que o sistema deve registrar para acompanhamento após encaminhar um interesse ao WhatsApp? → A: Deve criar um
+  lembrete interno e um `ContactRecord` pendente vinculados ao interesse, para a administradora completar após o
+  atendimento.
 
 ## User Scenarios & Testing
 
@@ -58,7 +61,12 @@ interesse e verificando o registro da interação e a continuidade para o WhatsA
    registra uma única interação relacionada ao cliente e ao produto.
 4. **Given** que o interesse foi registrado, **When** o cliente prossegue com o atendimento, **Then** o sistema permite
    abrir o WhatsApp com contexto suficiente para identificar o produto escolhido.
-5. **Given** que o cliente foi encaminhado ao WhatsApp, **When** a negociação avança, **Then** preço, tamanho,
+5. **Given** que um novo interesse foi registrado e o cliente recebeu o encaminhamento ao WhatsApp, **When** o fluxo é
+   concluído, **Then** o sistema cria exatamente um lembrete interno e um `ContactRecord` pendente relacionados ao
+   interesse, ao cliente e ao produto.
+6. **Given** que a mesma confirmação de interesse é processada novamente, **When** o sistema reconhece a repetição,
+   **Then** devolve o resultado existente sem duplicar o interesse, o lembrete ou o `ContactRecord` pendente.
+7. **Given** que o cliente foi encaminhado ao WhatsApp, **When** a negociação avança, **Then** preço, tamanho,
    disponibilidade, pagamento e fechamento permanecem fora da aplicação.
 
 ---
@@ -114,14 +122,15 @@ verificando que apenas a administradora acessa seu contexto comercial.
 
 ### User Story 5 - Registrar contatos e lembretes (Priority: P3)
 
-Como administradora, quero registrar contatos realizados e ações futuras de relacionamento com um cliente, para
-acompanhar o histórico e não perder oportunidades de acompanhamento.
+Como administradora, quero registrar contatos realizados, completar registros pendentes originados por interesses e
+acompanhar ações futuras de relacionamento com um cliente, para manter o histórico sem presumir que todo redirecionamento
+ao WhatsApp resultou em conversa.
 
 **Why this priority**: Histórico e lembretes ampliam o valor da base de clientes, mas dependem da identificação dos
 clientes e do contexto comercial já registrado.
 
-**Independent Test**: Pode ser testado selecionando um cliente, registrando um contato e um lembrete futuro e depois
-consultando essas informações no contexto do mesmo cliente.
+**Independent Test**: Pode ser testado selecionando um cliente, registrando um contato manual e um lembrete, gerando um
+interesse com acompanhamento automático e completando o `ContactRecord` pendente após o atendimento.
 
 **Acceptance Scenarios**:
 
@@ -133,8 +142,8 @@ consultando essas informações no contexto do mesmo cliente.
    prevista, **Then** ele fica associado ao cliente como pendente.
 4. **Given** que um lembrete pendente ultrapassou sua data prevista, **When** a administradora consulta os lembretes,
    **Then** ele continua pendente e é identificado como vencido.
-5. **Given** que um lembrete foi atendido, **When** a administradora o conclui, **Then** ele deixa de aparecer como
-   pendente sem perder o contexto do relacionamento.
+5. **Given** que um lembrete manual foi atendido, **When** a administradora o conclui, **Then** ele deixa de aparecer
+   como pendente sem perder o contexto do relacionamento.
 6. **Given** que um cliente autorizou contatos comerciais proativos, **When** a administradora consulta seu contexto,
    **Then** consegue verificar que a autorização está vigente antes de planejar o contato.
 7. **Given** que um cliente retirou a autorização, **When** a administradora consulta seu contexto ou seus lembretes,
@@ -143,6 +152,14 @@ consultando essas informações no contexto do mesmo cliente.
 8. **Given** que um cliente possui autorização vigente para contatos comerciais proativos, **When** ele retira essa
    autorização, **Then** o sistema registra a retirada e o cliente deixa de ser elegível para novos contatos proativos,
    sem impedir atendimentos iniciados por ele próprio.
+9. **Given** que o cliente foi encaminhado ao WhatsApp, **When** ainda não há confirmação de que ocorreu uma conversa,
+   **Then** o `ContactRecord` automático permanece pendente e não é apresentado como contato realizado.
+10. **Given** que a administradora realizou o atendimento relacionado a um interesse, **When** completa as informações
+    do `ContactRecord` pendente e o conclui, **Then** o registro passa a compor o histórico e o lembrete associado é
+    concluído na mesma ação.
+11. **Given** que o cliente não autorizou ou revogou contatos comerciais proativos, **When** existe um lembrete criado a
+    partir de interesse iniciado por ele, **Then** esse lembrete continua acionável para acompanhamento do atendimento
+    solicitado.
 
 ## Edge Cases
 
@@ -150,7 +167,9 @@ consultando essas informações no contexto do mesmo cliente.
   novo interesse e informar a mudança ao cliente.
 * Se a autenticação do cliente expirar durante o fluxo de interesse, o sistema deve solicitar nova autenticação e
   preservar, quando possível, o produto que originou a ação.
-* Se o WhatsApp não puder ser aberto, o interesse já confirmado deve permanecer registrado sem ser duplicado.
+* Se o WhatsApp não puder ser aberto, o interesse, o lembrete e o `ContactRecord` pendente já criados devem permanecer
+  registrados sem duplicação.
+* A repetição idempotente de uma confirmação de interesse não deve criar outro lembrete nem outro `ContactRecord`.
 * Se o envio, substituição ou exclusão de uma imagem falhar, o catálogo não deve apresentar referência inválida ou
   atualização parcial.
 * Um produto não deve ser disponibilizado no catálogo sem pelo menos uma imagem válida.
@@ -249,11 +268,11 @@ consultando essas informações no contexto do mesmo cliente.
 #### Histórico de contatos
 
 * **FR-046**: A administradora DEVE conseguir registrar uma interação comercial realizada com um cliente.
-* **FR-047**: Cada registro de contato DEVE conter, no mínimo, a data da interação, o canal utilizado e uma descrição do
-  contato.
+* **FR-047**: Cada registro de contato concluído DEVE conter, no mínimo, a data da interação, o canal utilizado e uma
+  descrição do contato; registros automáticos ainda pendentes PODEM aguardar a complementação da descrição.
 * **FR-048**: Cada registro de contato DEVE permanecer associado ao cliente correspondente.
-* **FR-049**: A administradora DEVE conseguir consultar o histórico de contatos de um cliente em ordem que permita
-  compreender a sequência cronológica das interações.
+* **FR-049**: A administradora DEVE conseguir consultar os contatos de um cliente em ordem que permita compreender a
+  sequência cronológica, distinguindo registros pendentes de contatos já concluídos.
 
 #### Lembretes
 
@@ -263,7 +282,8 @@ consultando essas informações no contexto do mesmo cliente.
 * **FR-053**: A administradora DEVE conseguir consultar os lembretes pendentes.
 * **FR-054**: Um lembrete pendente cuja data prevista tenha passado DEVE ser identificado como vencido sem que seu
   estado seja automaticamente alterado.
-* **FR-055**: A administradora DEVE conseguir marcar um lembrete como concluído.
+* **FR-055**: A administradora DEVE conseguir marcar um lembrete manual como concluído; o lembrete automático associado
+  a um interesse DEVE ser concluído pelo fluxo de conclusão do `ContactRecord` correspondente.
 * **FR-056**: A conclusão de um lembrete NÃO DEVE apagar o registro necessário para preservar o contexto do
   relacionamento.
 * **FR-057**: Um lembrete vencido NÃO DEVE ser ocultado automaticamente enquanto permanecer pendente.
@@ -288,6 +308,26 @@ consultando essas informações no contexto do mesmo cliente.
   proativos.
 * **FR-067**: Quando uma autorização for retirada, lembretes pendentes destinados a contato proativo DEVEM ser
   identificados como não acionáveis, sem apagar o histórico de contatos ou impedir atendimentos iniciados pelo cliente.
+
+#### Acompanhamento automático do interesse
+
+* **FR-068**: Cada novo interesse confirmado com encaminhamento ao WhatsApp DEVE criar automaticamente um lembrete
+  interno para a administradora completar posteriormente o registro do atendimento.
+* **FR-069**: O lembrete automático DEVE nascer pendente e acionável, com a ação de completar o registro do atendimento,
+  e identificar, no mínimo, o canal `WhatsApp`, a data do registro do interesse, o cliente, seu identificador único e o
+  produto que originou o interesse.
+* **FR-070**: A criação do lembrete automático DEVE criar exatamente um `ContactRecord` pendente relacionado ao mesmo
+  interesse, cliente, produto e lembrete.
+* **FR-071**: Um `ContactRecord` pendente NÃO DEVE afirmar que uma conversa ocorreu nem compor o histórico de contatos
+  concluídos.
+* **FR-072**: A administradora DEVE conseguir completar as informações do `ContactRecord` pendente após realizar o
+  atendimento e então marcá-lo como concluído.
+* **FR-073**: A conclusão do `ContactRecord` automático DEVE concluir o lembrete relacionado na mesma ação e preservar
+  ambos no contexto histórico do cliente.
+* **FR-074**: O processamento repetido da mesma confirmação de interesse NÃO DEVE duplicar o lembrete nem o
+  `ContactRecord` associados.
+* **FR-075**: O lembrete criado a partir de um interesse DEVE ser tratado como acompanhamento de atendimento iniciado
+  pelo cliente e permanecer acionável independentemente da autorização para contatos comerciais proativos.
 
 ## Success Criteria
 
@@ -325,6 +365,15 @@ consultando essas informações no contexto do mesmo cliente.
   comercial proativo.
 * **SC-020**: A retirada da autorização torna não acionáveis os lembretes pendentes de contato proativo sem apagar o
   histórico comercial do cliente.
+* **SC-021**: Cada novo interesse confirmado com encaminhamento ao WhatsApp produz exatamente um lembrete interno e um
+  `ContactRecord` pendente com canal, data, cliente, identificador do cliente e produto corretos.
+* **SC-022**: Repetir a mesma confirmação de interesse não aumenta a quantidade de interesses, lembretes ou
+  `ContactRecord` relacionados à confirmação.
+* **SC-023**: Nenhum `ContactRecord` automático pendente é apresentado como evidência de que o atendimento ocorreu.
+* **SC-024**: Ao concluir o `ContactRecord` após o atendimento, o registro passa a integrar o histórico e seu lembrete é
+  concluído na mesma ação.
+* **SC-025**: A ausência ou revogação de autorização para contato proativo não torna inacionável um lembrete originado
+  pelo próprio interesse do cliente.
 
 ## Assumptions
 
@@ -337,10 +386,12 @@ consultando essas informações no contexto do mesmo cliente.
 * Cada produto pertence a uma única categoria na V1.
 * As categorias são administradas pela própria loja e não são informadas livremente durante cada cadastro de produto.
 * Cada produto possui uma ou mais imagens e exatamente uma delas é considerada principal.
-* O histórico de contatos é alimentado manualmente pela administradora.
+* As informações finais do histórico de contatos são preenchidas manualmente pela administradora; o fluxo de interesse
+  cria apenas o `ContactRecord` pendente que aguarda confirmação e complementação do atendimento.
 * Os interesses originados pelo catálogo são registrados automaticamente pelo fluxo correspondente e ficam disponíveis
   no contexto do cliente.
-* Os lembretes são criados e concluídos manualmente pela administradora.
+* Lembretes gerais são criados e concluídos manualmente; o lembrete de acompanhamento do interesse é criado
+  automaticamente e concluído quando a administradora conclui o `ContactRecord` associado.
 * A V1 não envia notificações ou mensagens automáticas aos clientes.
 * A autorização para contatos comerciais proativos é distinta do atendimento solicitado pelo cliente ao demonstrar
   interesse em um produto.
