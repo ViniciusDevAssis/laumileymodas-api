@@ -15,8 +15,9 @@
 
 `Account` representa a identidade e o papel internos. `AccountExternalIdentity` vincula uma conta ao
 Google sem transferir ao provedor a autoridade sobre papéis. `RefreshToken` representa uma
-credencial renovável rotativa. `Customer` representa a pessoa e seu contexto de relacionamento. A
-única conta `ADMIN` não precisa de um registro `Customer`.
+credencial renovável rotativa. `OAuthHandoff` representa somente a passagem temporária e de uso único
+entre o callback Google e o frontend. `Customer` representa a pessoa e seu contexto de relacionamento.
+A única conta `ADMIN` não precisa de um registro `Customer`.
 
 ### Catalog
 
@@ -72,6 +73,11 @@ Constraints:
 é derivado do e-mail: `ADMIN` só pode ser criado/autenticado quando `subject` e e-mail verificado
 correspondem à configuração operacional autorizada.
 
+Para clientes, `email_at_link` é evidência de auditoria do momento do vínculo, não uma chave de
+identidade. Um `subject` inédito nunca é associado automaticamente a uma `Account` existente pela
+coincidência desse e-mail. Se o e-mail já estiver ocupado sem vínculo com o `subject`, o fluxo é
+rejeitado; vinculação manual não pertence à V1.
+
 ### `refresh_token`
 
 | Field | Type | Rules |
@@ -89,6 +95,30 @@ correspondem à configuração operacional autorizada.
 Um token é utilizável somente se não expirou, não foi consumido nem revogado e a conta está ativa.
 A rotação consome o atual e cria o sucessor na mesma transação. Reuso de token consumido revoga todos
 os tokens ainda ativos da família.
+
+### `oauth_handoff`
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | UUID | Primary key interno |
+| `handle_hash` | varchar(255) | Hash do valor opaco enviado somente em cookie, unique, required |
+| `purpose` | varchar(40) | `EXISTING_ACCOUNT_LOGIN` ou `CLIENT_REGISTRATION`, required |
+| `account_id` | UUID | FK nullable; required para login de conta existente |
+| `provider` | varchar(30) | `GOOGLE` na V1, required |
+| `provider_subject` | varchar(255) | `sub` validado, required |
+| `verified_email` | varchar(320) | E-mail validado no provedor, required |
+| `given_name` | varchar(100) | Nullable; sugestão para concluir cadastro |
+| `family_name` | varchar(100) | Nullable; sugestão para concluir cadastro |
+| `expires_at` | timestamptz | Required; no máximo 10 minutos após criação |
+| `consumed_at` | timestamptz | Preenchido atomicamente no uso; nullable |
+| `created_at` | timestamptz | Required |
+
+O valor bruto nunca é persistido, retornado em JSON ou colocado na URL. O handoff não concede acesso
+a recursos e só pode ser consumido pelo endpoint compatível com seu `purpose`, acompanhado da
+proteção CSRF. Expiração ou consumo impede reutilização.
+
+`verified_email` permite preencher o novo cadastro ou detectar conflito com uma conta existente; ele
+não autoriza a criação de handoff para essa conta nem a criação de `AccountExternalIdentity`.
 
 ### `customer`
 
@@ -217,6 +247,7 @@ Derivations:
 ```text
 Account 1 ─── 0..* AccountExternalIdentity
 Account 1 ─── 0..* RefreshToken
+Account 1 ─── 0..* OAuthHandoff (somente login de conta existente)
 Account 1 ─── 0..1 Customer
 Category 1 ─── * Product
 Product 1 ─── 1..* ProductImage
@@ -278,6 +309,16 @@ CONSUMED ── reuse detected ──> family REVOKED
 ACTIVE ── expires ──> EXPIRED (derived)
 ```
 
+### OAuthHandoff
+
+```text
+ACTIVE ── exchange/complete registration ──> CONSUMED
+ACTIVE ── timeout ─────────────────────────> EXPIRED (derived)
+```
+
+Não existe transição de handoff para sessão ou autenticação de recurso. Somente seu consumo bem
+sucedido permite emitir os tokens próprios da aplicação.
+
 ### Interest
 
 Interesse não muda de estado nem é removido na V1. A repetição idempotente recupera o mesmo registro.
@@ -287,6 +328,9 @@ Interesse não muda de estado nem é removido na V1. A repetição idempotente r
 - Conta e cliente são criados atomicamente.
 - Vínculo Google e eventual criação de `Account`/`Customer` são atômicos; a constraint da
   administradora permanece a autoridade final contra concorrência.
+- Criação do handoff ocorre somente após validação completa do callback Google. Seu consumo usa lock,
+  marca `consumed_at` e emite tokens ou cria `Account`/`Customer` na mesma transação lógica, impedindo
+  reutilização concorrente.
 - Rotação consome o refresh token atual e cria seu sucessor em uma única transação com lock; detecção
   de reuso revoga a família atomicamente.
 - Consentimento é alterado em uma transação curta; leituras de lembretes calculam acionabilidade
@@ -305,6 +349,7 @@ Interesse não muda de estado nem é removido na V1. A repetição idempotente r
 - `account(role) WHERE role = 'ADMIN'` unique partial.
 - `account_external_identity(provider, subject)` unique e índice por `account_id`.
 - `refresh_token(jti_hash)` unique; índices por `account_id`, `family_id` e `expires_at`.
+- `oauth_handoff(handle_hash)` unique; índices por `expires_at` e `account_id` quando não nulo.
 - `category(normalized_name)` unique.
 - `product(status, created_at DESC)` para catálogo.
 - `product(category_id)` para gestão.
@@ -322,6 +367,9 @@ Interesse não muda de estado nem é removido na V1. A repetição idempotente r
 2. `V2__create_catalog.sql`
 3. `V3__create_interests_crm_and_follow_up_links.sql`
 4. `V4__create_operational_indexes.sql`
+
+`V1` inclui identidades externas, refresh tokens e handoffs OAuth temporários; `V4` inclui os índices
+de expiração e busca operacional desses registros.
 
 Após serem aplicadas fora do ambiente local descartável, migrations não são editadas. Qualquer
 ajuste recebe uma nova versão.

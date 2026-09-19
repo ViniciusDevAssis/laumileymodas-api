@@ -1,6 +1,6 @@
 # Implementation Plan: Operação Comercial V1
 
-**Branch**: `main` | **Feature context**: `001-v1-commercial-flows` | **Date**: 2026-09-19 | **Spec**: [spec.md](./spec.md)
+**Branch**: `001-v1-commercial-flows` | **Feature context**: `001-v1-commercial-flows` | **Date**: 2026-09-19 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/001-v1-commercial-flows/spec.md`
 
@@ -78,6 +78,9 @@ Não há violações que bloqueiem a pesquisa ou exijam exceção à Constitutio
 - Converte multipart em um tipo neutro de conteúdo antes de chamar `application`.
 - Obtém a identidade do principal autenticado; nunca aceita do cliente um papel ou identidade para
   decidir autorização.
+- Converte o principal do Spring Security em uma representação própria mínima (`AuthenticatedAccount`)
+  antes de chamar casos de uso; `domain` e regras de aplicação não recebem `Authentication`, `Jwt`
+  ou outros tipos do framework.
 - Valida forma, tamanho e sintaxe de entrada. Não contém regras de negócio, transações, acesso a
   repositórios ou chamadas ao Cloudinary.
 
@@ -101,7 +104,8 @@ Não há violações que bloqueiem a pesquisa ou exijam exceção à Constitutio
 
 ### `infrastructure`
 
-- Implementa persistência JPA/PostgreSQL, migrations, Spring Security, validação dos JWT próprios,
+- Implementa persistência JPA/PostgreSQL, migrations, configuração central do Spring Security com
+  `@EnableMethodSecurity`, validação dos JWT próprios,
   cliente Google OpenID Connect, Cloudinary, configuração e geração da URL do WhatsApp.
 - Converte modelos persistidos e respostas de fornecedor para tipos definidos pela aplicação.
 - Mantém credenciais exclusivamente em configuração externa e sanitiza logs de integrações.
@@ -118,10 +122,15 @@ seus limites como contratos públicos.
   senha e inicia o consentimento proativo como não autorizado.
 - `LoginWithPassword`: autentica somente contas com credencial local e não revela qual dado foi
   incorreto.
-- `CompleteGoogleLogin`: valida a identidade Google, autentica conta já vinculada ou emite uma
-  credencial curta para completar o cadastro de cliente; no fluxo administrativo, cria/autentica o
-  `Account` próprio e impede elevação quando o `sub` não corresponde à conta autorizada.
-- `CompleteGoogleCustomerRegistration`: valida o registration token e os dados obrigatórios e cria
+- `CompleteGoogleLogin`: valida a identidade Google; se o `sub` já estiver vinculado, cria um handoff
+  temporário de uso único para a conta correspondente; se não houver vínculo nem conta com o mesmo
+  e-mail, cria o handoff de conclusão do cadastro. Se o e-mail já pertencer a uma conta local sem
+  aquele `sub`, rejeita a vinculação automática e orienta o uso da autenticação existente. No fluxo
+  administrativo, cria/autentica o `Account` próprio e impede elevação quando o `sub` não corresponde
+  à configuração autorizada.
+- `ExchangeGoogleHandoff`: consome o handoff de uma conta existente, configura o refresh token e
+  devolve o access token pelo corpo da resposta, nunca pela URL.
+- `CompleteGoogleCustomerRegistration`: consome o handoff de cadastro e os dados obrigatórios e cria
   `Account`, identidade Google e `Customer` atomicamente antes de emitir access/refresh.
 - `IssueTokenPair`, `RefreshAccessToken` e `Logout`: emitem access token JWT, rotacionam refresh token
   de uso único e revogam a credencial renovável atual.
@@ -169,45 +178,67 @@ automático de comunicação será criado na V1.
 
 ## Authentication and Authorization Strategy
 
-- Spring Security autenticará a API de forma stateless pelo header `Authorization: Bearer`. A
+- Uma configuração central do Spring Security, com `@EnableMethodSecurity`, manterá a API stateless,
+  negará rotas não classificadas e combinará autorização HTTP com method security nos casos de uso
+  administrativos ou contextuais em que a segunda barreira trouxer proteção concreta. Cadastro
+  público cria somente `CLIENT` e rejeita qualquer campo de papel; não existe operação pública de
+  criação ou promoção de `ADMIN`.
+- O access token será usado exclusivamente no header `Authorization: Bearer`. A
   aplicação assinará access tokens JWT assimétricos e validará assinatura, algoritmo, `iss`, `aud`,
   `exp` e `nbf`. O token terá duração inicial de 15 minutos e conterá somente `sub` com o ID do
-  `Account`, papel, `iat`, `exp` e `jti`; e-mail e dados do cliente não serão claims.
+  `Account`, papel, `iat`, `exp` e `jti`; e-mail e dados do cliente não serão claims. Access token,
+  refresh token e handoff OAuth nunca serão enviados em query parameters ou fragmentos de URL.
 - A chave privada de assinatura e as chaves públicas de validação virão de segredos externos, nunca
   do repositório ou banco. O header `kid` identificará a chave ativa; uma rotação operacional poderá
-  manter a chave pública anterior apenas durante a janela máxima dos tokens já emitidos. CORS
-  aceitará somente origens configuradas explicitamente.
+  manter a chave pública anterior apenas durante a janela máxima dos tokens já emitidos.
 - O refresh token também será um JWT próprio, com `typ=refresh`, `sub`, `jti`, `family_id`, `iat` e
   `exp`, duração inicial de 30 dias e hash do `jti` persistido. Será enviado apenas em cookie
-  `HttpOnly`, `Secure` em produção, `SameSite=Strict` e
-  `Path=/api/v1/auth`; `/auth/refresh` e `/auth/logout` aceitarão somente `POST` e validarão a origem
-  configurada. Cada uso rotaciona o token em uma transação e invalida o anterior; reuso revoga toda
-  a família. Logout revoga a família atual e remove o cookie. Access tokens já emitidos permanecem
-  válidos até o curto `exp`, sem blacklist na V1.
+  `HttpOnly`, `Secure` em produção, sem atributo `Domain` e com `Path=/api/v1/auth`. `SameSite=Lax`
+  será o padrão para frontend e API no mesmo site; uma implantação realmente cross-site exigirá
+  `SameSite=None`, `Secure` e origens HTTPS explicitamente autorizadas. Cada uso rotaciona o token em
+  uma transação e invalida o anterior; reuso revoga toda a família. Logout revoga a família atual e
+  remove o cookie. Access tokens já emitidos permanecem válidos até o curto `exp`, sem blacklist na V1.
+- CSRF permanecerá habilitado para endpoints que consomem cookies (`/auth/refresh`, `/auth/logout`,
+  `/auth/google/exchange` e conclusão do cadastro Google). Esses `POST`s exigirão token CSRF no
+  header, pelo padrão double-submit suportado pelo Spring Security, e validação de `Origin` contra a
+  lista configurada. `CookieCsrfTokenRepository.withHttpOnlyFalse()` disponibilizará o cookie
+  `XSRF-TOKEN`, legível pelo frontend e sem valor de autenticação; o header esperado também será
+  `X-XSRF-TOKEN`. `GET /auth/csrf` será público, materializará/renovará esse cookie e não emitirá
+  credenciais nem autenticará o usuário. O frontend chamará esse endpoint na inicialização, após o
+  redirecionamento OAuth e sempre que precisar renovar o token antes de repetir uma operação rejeitada
+  por CSRF. O refresh e o handoff continuam em cookies `HttpOnly` separados. Endpoints autenticados
+  somente por Bearer não dependem de cookie e ficam fora desse matcher específico; a API não
+  desabilita CSRF globalmente.
 - Senhas serão armazenadas pelo `DelegatingPasswordEncoder` usando BCrypt com custo inicial 12,
   calibrado no ambiente. A entrada será limitada a 64 caracteres e 72 bytes UTF-8 para não exceder
   o limite seguro do BCrypt. Senha, hash, tokens e credenciais nunca entram em respostas ou logs.
 - O login Google usará OAuth 2.0 Authorization Code com OpenID Connect pelo Spring Security OAuth2
-  Client. A aplicação validará `state`, nonce, assinatura, emissor, audiência, expiração e
+  Client e somente os escopos `openid`, `profile` e `email`. A aplicação validará `state`, nonce,
+  assinatura, emissor, audiência, expiração e
   `email_verified`, identificará a pessoa por `(provider=GOOGLE, subject=sub)` e nunca aceitará token
-  Google como credencial da API. Após o callback, ela trabalhará com o `Account` local e emitirá o
-  mesmo par access/refresh da autenticação por senha.
+  Google como credencial da API. Depois da validação, somente o `Account` e tipos próprios atravessam
+  os limites da aplicação; objetos do Google permanecem no adapter de infraestrutura.
 - A requisição de autorização Google será mantida apenas durante o handshake em cookie curto,
   assinado/cifrado, `HttpOnly`, `Secure` em produção e `SameSite=Lax`, sem sessão persistida no
-  servidor. Quando um novo cliente ainda precisar informar telefone, o callback emitirá um
-  registration token JWT de
-  uso restrito e duração de 10 minutos; somente após completar os dados serão emitidos access e
-  refresh tokens.
+  servidor. O callback nunca apresenta JSON: cria um handoff opaco, aleatório, de uso único e duração
+  máxima de 10 minutos, persiste apenas seu hash e o envia em cookie `HttpOnly`; então redireciona
+  para uma das rotas fixas do frontend configuradas no backend. Para conta existente, o frontend
+  chama `POST /auth/google/exchange`; para novo cliente, chama `POST /auth/google/customers` apenas
+  com os dados adicionais necessários. O consumo invalida o handoff atomicamente. Esse handoff não
+  autentica recursos, não funciona como access token e nunca aparece na URL ou em resposta JSON.
+  O cookie de handoff terá `Path=/api/v1/auth/google`, `SameSite=Lax` no arranjo same-site e `Secure`
+  em produção; configuração cross-site segue as mesmas restrições explícitas do refresh.
 - O início do OAuth é explícito para cliente ou administradora e a intenção é protegida no `state`.
   No fluxo administrativo, qualquer identidade que não corresponda ao `sub` e e-mail autorizados é
   negada, sem cair no cadastro de cliente. Para `CLIENT`, uma identidade Google inédita só cria
   `Account`, identidade externa e `Customer`, com consentimento proativo negado, depois que os dados
   obrigatórios ausentes, como telefone, forem coletados. Um Google `sub` já vinculado autentica a
-  conta existente. E-mail Google
-  verificado só poderá vincular uma conta `CLIENT` existente em fluxo transacional sem conflito; uma
-  tentativa de vincular ou assumir `ADMIN` por coincidência de e-mail será negada.
-- A matriz é: catálogo, cadastro, login, início/callback Google e refresh públicos nos limites de
-  cada fluxo; interesse e consentimento para `CLIENT`; catálogo administrativo e CRM para `ADMIN`;
+  conta existente. Se um `sub` inédito trouxer e-mail já pertencente a uma conta local, o fluxo é
+  rejeitado sem criar `AccountExternalIdentity`, mesmo com `email_verified=true`; o usuário deve usar
+  a autenticação já existente dessa conta. A V1 não oferece vinculação manual de identidades. E-mail
+  nunca autoriza vínculo nem permite assumir `CLIENT` ou `ADMIN`.
+- A matriz é: catálogo, cadastro, login, obtenção do CSRF, início/callback Google e refresh públicos
+  nos limites de cada fluxo; interesse e consentimento para `CLIENT`; catálogo administrativo e CRM para `ADMIN`;
   negação por padrão para qualquer rota não classificada. Regras contextuais também permanecem nos
   casos de uso.
 - `401` representa autenticação ausente, inválida ou expirada; `403`, papel autenticado sem permissão.
@@ -215,10 +246,17 @@ automático de comunicação será criado na V1.
   da API. Erros de login e OAuth são genéricos para impedir enumeração de contas.
 - Uma limitação simples e configurável de tentativas de login por origem e identificador será
   mantida na instância local, sem bloqueio permanente e sem infraestrutura distribuída.
+- URLs de sucesso, conclusão de cadastro e erro do frontend serão propriedades do backend e
+  validadas no startup. O cliente não fornece `returnUrl`; somente destinos exatos configurados são
+  usados, evitando open redirect. CORS aceita apenas origens conhecidas por ambiente, nunca `*` com
+  credenciais, e permite credenciais somente para os fluxos de cookie previstos.
+- Credenciais Google e Cloudinary, chaves JWT, `sub` administrativo, origens e URLs do frontend e
+  demais segredos entram por configuração externa/variáveis de ambiente. Perfis de ambiente mudam
+  valores e políticas de transporte, sem duplicar regras de negócio.
 
 ### Provisionamento da única administradora
 
-A identidade administrativa será configurada por segredos operacionais contendo o `sub` Google
+A identidade administrativa será fornecida por configuração externa segura contendo o `sub` Google
 autorizado e o e-mail esperado da loja. Não haverá senha administrativa, endpoint de cadastro de
 administrador, credencial padrão ou segredo em migration. No primeiro callback Google válido que
 corresponder simultaneamente ao `sub` autorizado e ao e-mail verificado esperado, a aplicação cria,
@@ -331,7 +369,8 @@ fluxos.
   de mídia em cada ponto de falha.
 - Infraestrutura pura: geração segura do link WhatsApp, normalização e codificação de valores.
 - Segurança: emissão/validação de claims JWT, rotação e detecção de reuso de refresh token, mapeamento
-  do Google `sub`, recusa de elevação administrativa e unicidade global dos códigos de erro.
+  do Google `sub`, consumo único do handoff, recusa de elevação administrativa, conversão para
+  `AuthenticatedAccount` e unicidade global dos códigos de erro.
 - Fakes pequenos substituirão ports; não serão testados getters, mapeamentos triviais ou detalhes do
   framework sem risco comportamental.
 
@@ -339,10 +378,22 @@ fluxos.
 
 - `@SpringBootTest`, MockMvc e PostgreSQL real via Testcontainers; H2 não será usado.
 - Flyway deve construir um banco vazio e Hibernate deve validar o schema.
-- O callback Google autorizado deve criar/autenticar uma única administradora; outro `sub`, mesmo
-  com e-mail semelhante, deve receber negação. A constraint parcial será testada sob concorrência.
-- Matriz anônimo/`CLIENT`/`ADMIN`, login local e Google, Bearer JWT válido/expirado/adulterado,
-  refresh rotativo, logout, respostas `401`/`403` e negação padrão.
+- Cadastro público sempre cria `CLIENT`, inclusive diante de tentativa de enviar papel; `CLIENT` não
+  acessa operações administrativas. A constraint de uma única `ADMIN` será testada sob concorrência.
+- Login local válido e inválido; Bearer JWT válido, expirado e adulterado; refresh rotativo, revogado
+  e reutilizado; logout; ausência de autenticação com `401`; papel insuficiente com `403`; todos os
+  erros preservam `ApiErrorResponse` por `AuthenticationEntryPoint` e `AccessDeniedHandler` próprios.
+- Login Google de cliente e da conta administrativa cujo `sub` autorizado vem da configuração; outro
+  `sub` no fluxo administrativo recebe negação e nunca cria/promove conta. Callback, redirects fixos,
+  handoff de uso único e ausência de tokens em URLs serão testados sem rede externa.
+- Um `sub` Google inédito com e-mail já usado por conta local é rejeitado sem criar vínculo; login por
+  `sub` previamente vinculado e cadastro Google sem conflito continuam funcionando.
+- Endpoints que consomem refresh ou handoff rejeitam CSRF ausente/inválido e origem desconhecida;
+  `GET /auth/csrf` materializa o cookie `XSRF-TOKEN`, não autentica nem emite tokens, e permite repetir
+  o fluxo com o header correspondente. CORS permite credenciais somente para origens configuradas e
+  nunca combina credenciais com `*`.
+- Revogar consentimento proativo não altera papel, autenticação nem acesso do cliente às operações
+  iniciadas por ele.
 - Restrições, transações, paginação, idempotência concorrente e invariantes de imagem serão testadas
   no PostgreSQL.
 - Concorrência e retry da confirmação devem produzir exatamente um `Interest`, um `Reminder` e um

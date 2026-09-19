@@ -27,6 +27,9 @@ $env:CLOUDINARY_API_KEY='<api-key>'
 $env:CLOUDINARY_API_SECRET='<api-secret>'
 $env:LAUMILEY_WHATSAPP_NUMBER='<numero-e164-sem-sinal>'
 $env:LAUMILEY_ALLOWED_ORIGINS='http://localhost:3000'
+$env:LAUMILEY_FRONTEND_AUTH_SUCCESS_URL='http://localhost:3000/auth/google/success'
+$env:LAUMILEY_FRONTEND_REGISTRATION_URL='http://localhost:3000/auth/google/complete-registration'
+$env:LAUMILEY_FRONTEND_AUTH_ERROR_URL='http://localhost:3000/auth/google/error'
 $env:GOOGLE_CLIENT_ID='<google-client-id>'
 $env:GOOGLE_CLIENT_SECRET='<google-client-secret>'
 $env:LAUMILEY_JWT_PRIVATE_KEY='<chave-privada-de-desenvolvimento>'
@@ -43,8 +46,8 @@ criá-lo ou alterá-lo automaticamente.
 Obtenha o `sub` da conta Google controlada pela loja e configure-o junto do e-mail verificado
 esperado. Não configure senha administrativa. No primeiro login Google válido dessa identidade, a
 aplicação cria o único `Account` `ADMIN`; qualquer outro `sub` no fluxo administrativo deve receber
-`403`, mesmo que informe um e-mail parecido. O segredo do cliente Google e as chaves JWT não devem
-ser versionados.
+negação e redirecionamento para a rota fixa de erro, sem criar handoff, mesmo que informe um e-mail
+parecido. O segredo do cliente Google e as chaves JWT não devem ser versionados.
 
 ## 3. Execute verificações automatizadas
 
@@ -56,7 +59,11 @@ A suíte deve:
 
 - subir PostgreSQL real com Testcontainers e executar todo o histórico Flyway;
 - verificar catálogo público e matriz anônimo/`CLIENT`/`ADMIN`;
-- verificar login local/Google, JWT válido, expirado e adulterado, rotação, reuso, logout e negação padrão;
+- verificar cadastro público sempre como `CLIENT`, login local válido/inválido, login Google de
+  cliente e `ADMIN`, JWT válido, expirado e adulterado, rotação, revogação, reuso, logout e negação padrão;
+- verificar handoff Google por redirecionamento fixo, consumo único, ausência de tokens na URL,
+  proteção CSRF nos endpoints de cookie e CORS apenas para as origens configuradas;
+- verificar que `sub` inédito com e-mail já cadastrado é rejeitado sem account linking automático;
 - provar idempotência concorrente do interesse e do conjunto `Reminder`/`ContactRecord`;
 - preservar as invariantes de imagens em sucesso, rollback e falha externa;
 - validar consentimento, contatos pendentes/concluídos e conclusão conjunta do lembrete;
@@ -72,12 +79,23 @@ precisa ser empacotado ou executado em container durante o desenvolvimento.
 .\mvnw.cmd spring-boot:run
 ```
 
-Use um objeto `WebRequestSession` somente para preservar o cookie `HttpOnly` de refresh token:
+Use um objeto `WebRequestSession` para preservar cookies `HttpOnly`. Inicialize o CSRF pelo endpoint
+explícito e, nas operações que consomem refresh ou handoff, envie o valor obtido no header
+`X-XSRF-TOKEN`:
 
 ```powershell
 $api='http://localhost:8080/api/v1'
 $session=New-Object Microsoft.PowerShell.Commands.WebRequestSession
+Invoke-WebRequest -Method Get -Uri "$api/auth/csrf" -WebSession $session | Out-Null
+$csrfToken=($session.Cookies.GetCookies([Uri]"$api/auth/csrf") |
+  Where-Object Name -eq 'XSRF-TOKEN').Value
+$cookieHeaders=@{Origin='http://localhost:3000';'X-XSRF-TOKEN'=$csrfToken}
 ```
+
+`GET /auth/csrf` é público e apenas materializa ou renova o cookie legível `XSRF-TOKEN`; ele não
+autentica nem emite access, refresh ou handoff. O frontend deve chamá-lo na inicialização, após o
+retorno do OAuth e novamente antes de repetir uma operação rejeitada por CSRF. O valor do cookie é
+enviado em `X-XSRF-TOKEN`; o refresh permanece em outro cookie `HttpOnly`.
 
 ## 5. Valide catálogo anônimo
 
@@ -112,10 +130,17 @@ Resultado esperado: cadastro `201`, login `200`, access token JWT retornado, ref
 cookie seguro e papel `CLIENT`. A
 autorização de contato proativo começa como `false` e o cliente não consegue acessar `/admin/**`.
 
-Valide também `POST /auth/refresh`: o access token é renovado e o refresh token é rotacionado.
+Valide também `POST /auth/refresh`, incluindo cookie, `Origin` autorizado e header CSRF: o access
+token é renovado e o refresh token é rotacionado.
 Reutilizar o valor anterior deve retornar `401` e revogar a família. Para Google, abra
-`/auth/google/client`, conclua o fluxo e confirme que a aplicação usa seu próprio `Account` e retorna o
-mesmo contrato de tokens. Um cliente novo completa nome e WhatsApp antes de receber tokens.
+`/auth/google/client`, conclua o fluxo e confirme que o callback configura apenas o handoff temporário
+e redireciona para uma URL conhecida do frontend, sem JSON ou tokens na URL. Para conta existente, o
+frontend chama `POST /auth/google/exchange` com cookie, `Origin` e CSRF para receber o access token no
+corpo e o refresh token em cookie. Um cliente novo é redirecionado à rota fixa de conclusão e envia
+somente nome, sobrenome e WhatsApp a `POST /auth/google/customers`; o handoff não pode ser reutilizado.
+Crie também uma conta tradicional e simule um retorno Google com `sub` ainda não vinculado e o mesmo
+e-mail: o callback deve seguir para a rota fixa de erro sem criar identidade externa. A conta continua
+acessível somente pela autenticação que já possuía; a V1 não oferece vinculação manual.
 
 ## 7. Valide consentimento
 
@@ -158,12 +183,12 @@ primeira confirmação também cria exatamente um lembrete automático acionáve
 Revogue o refresh token do cliente e autentique a administradora pelo Google autorizado:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "$api/auth/logout" -WebSession $session
+Invoke-RestMethod -Method Post -Uri "$api/auth/logout" -WebSession $session -Headers $cookieHeaders
 ```
 
 Use `/auth/google/admin` e o access token administrativo no header Bearer. Confirme antes que outra
-conta Google recebe `403` nesse fluxo e não cria nem promove `Account`; ela continua podendo usar o
-fluxo de cliente. Depois do login administrativo, valide pelo contrato:
+conta Google é redirecionada para a rota fixa de erro, sem handoff, e não cria nem promove `Account`;
+ela continua podendo usar o fluxo de cliente. Depois do login administrativo, valide pelo contrato:
 
 1. criar e renomear uma categoria;
 2. criar produto multipart com uma ou mais imagens e uma principal;
@@ -198,8 +223,15 @@ remove o registro.
 - Bearer ausente, JWT expirado ou assinatura/claims inválidos em recurso protegido retornam `401`.
 - Refresh token ausente, expirado, revogado ou reutilizado retorna `401` e não emite access token.
 - Cliente autenticado em `/admin/**` retorna `403`.
+- Cadastro público que tente informar papel administrativo é rejeitado e nunca cria `ADMIN`.
 - Login com e-mail inexistente e senha incorreta retorna o mesmo formato genérico.
 - Conta Google não autorizada nunca recebe papel `ADMIN`.
+- `sub` Google inédito com e-mail já usado é rejeitado sem vincular ou assumir a conta local.
+- A conta Google cujo `sub` corresponde à configuração segura autentica a única `ADMIN`.
+- Retirar consentimento proativo não altera autenticação, papel ou acesso do cliente às próprias operações.
+- Origem CORS não configurada é rejeitada; nenhuma resposta usa origem curinga com credenciais.
+- Refresh, logout e troca/conclusão do handoff sem token CSRF válido são rejeitados.
+- `GET /auth/csrf` apenas renova `XSRF-TOKEN` e nunca cria autenticação ou credenciais.
 - Erros usam `application/json` com `ApiErrorResponse` e não incluem stack trace, senha, token, hash,
   resposta do Cloudinary ou dados de outro cliente. Validação, `AuthenticationEntryPoint` e
   `AccessDeniedHandler` preservam esse mesmo formato; falhas inesperadas usam `INTERNAL_001`.

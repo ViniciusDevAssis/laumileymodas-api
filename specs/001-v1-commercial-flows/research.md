@@ -33,26 +33,42 @@ acoplaria contratos; repositório genérico esconderia consultas específicas se
 **Decision**: usar Spring Security de forma stateless para a API. A aplicação emite access token JWT
 assinado assimetricamente, válido inicialmente por 15 minutos, e refresh token JWT próprio, com tipo
 e audiência distintos, válido por 30 dias. O hash do `jti` do refresh é persistido e rotacionado a
-cada uso. O refresh token fica em cookie `HttpOnly`, `Secure` em produção, `SameSite=Strict` e
-restrito às rotas de autenticação; refresh e logout validam a origem permitida. Reuso do token
-anterior revoga sua família.
+cada uso. O refresh token fica em cookie `HttpOnly`, `Secure` em produção, sem `Domain`, restrito a
+`/api/v1/auth` e com `SameSite=Lax` quando frontend e API são same-site; implantação cross-site exige
+`SameSite=None`, HTTPS e origem explícita. Refresh e logout exigem `POST`, header CSRF double-submit e
+`Origin` autorizado. Reuso do token anterior revoga sua família. CSRF não é desabilitado globalmente:
+o matcher protege os endpoints que consomem cookies, enquanto endpoints Bearer não dependem deles.
 
 Clientes podem autenticar por e-mail/senha ou por Google OAuth 2.0 Authorization Code com OpenID
-Connect. A aplicação valida integralmente o retorno Google, usa o `sub` como identificador externo
-imutável, cria ou vincula seu próprio `Account` e então emite os tokens da aplicação. Tokens Google
+Connect, somente com `openid`, `profile` e `email`. A aplicação valida integralmente o retorno Google
+e usa o `sub` como único identificador confiável para localizar vínculo externo. Se o `sub` não estiver
+vinculado e o e-mail já existir em outra conta local, o fluxo é rejeitado; `email_verified` não
+autoriza account linking. Sem vínculo e sem conflito de e-mail, segue o cadastro Google. Tokens Google
 nunca autorizam diretamente a API. O handshake mantém `state`, nonce e a intenção cliente/admin em
-cookie curto assinado/cifrado. Novo cliente que ainda precisa informar telefone recebe apenas um
-registration token JWT de 10 minutos, restrito à conclusão do cadastro, antes do par definitivo.
+cookie curto assinado/cifrado. O callback cria um handoff opaco de uso único, persiste somente seu
+hash, configura-o em cookie `HttpOnly` por até 10 minutos e redireciona para uma rota fixa do frontend.
+O frontend troca o handoff por tokens da aplicação em `POST` protegido por CSRF ou, para novo cliente,
+envia somente os dados adicionais. O handoff não funciona como access token, é consumido uma vez e
+nunca aparece na URL.
+
+O token CSRF será fornecido por `CookieCsrfTokenRepository.withHttpOnlyFalse()`. Um
+`GET /auth/csrf` público força a criação/renovação do cookie `XSRF-TOKEN`; o frontend copia seu valor
+para `X-XSRF-TOKEN` em refresh, logout e consumo/conclusão de handoff. Esse endpoint não autentica nem
+emite tokens da aplicação.
 
 **Rationale**: access tokens curtos limitam a janela de uma credencial vazada; refresh stateful e
 rotativo permite logout e revogação sem blacklist de todos os access tokens. O `sub` é estável mesmo
 quando o e-mail Google muda, enquanto o `Account` local mantém autorização e domínio independentes
-do provedor.
+do provedor. Recusar vínculo por e-mail impede tomada de conta; o endpoint CSRF torna explícito o
+bootstrap exigido pelo padrão double-submit.
 
-**Alternatives considered**: sessão persistida, refresh JWT sem estado, access token longo e uso do ID
-token Google como bearer da API. Sessão foi substituída pela decisão do projeto; refresh sem estado
-não permite rotação/reuso confiáveis; token longo amplia risco; token Google acopla a autorização
-interna ao provedor.
+**Alternatives considered**: sessão persistida, refresh JWT sem estado, access token longo, uso do ID
+token Google como bearer da API, retorno de tokens no callback/URL e vinculação automática por e-mail
+verificado. Sessão foi substituída pela decisão do projeto; refresh sem estado não permite
+rotação/reuso confiáveis; token longo amplia
+risco; token Google acopla a autorização interna ao provedor; JSON no callback prejudica o handoff
+ao frontend e tokens na URL vazam por histórico, logs e referrer. Vínculo por e-mail foi rejeitado
+porque e-mail não prova controle da credencial local já existente.
 
 **Sources**:
 
@@ -64,8 +80,9 @@ interna ao provedor.
 
 **Decision**: persistir senhas com `DelegatingPasswordEncoder` e BCrypt, custo inicial 12 calibrado
 no ambiente. Limitar a entrada a 64 caracteres e 72 bytes UTF-8 para não ultrapassar o limite do
-algoritmo. Usar apenas `ROLE_CLIENT` e `ROLE_ADMIN`, negar por padrão e combinar regras de rota com
-proteção nos casos de uso sensíveis.
+algoritmo. Centralizar a configuração, habilitar `@EnableMethodSecurity`, usar apenas `ROLE_CLIENT` e
+`ROLE_ADMIN`, negar por padrão e combinar regras de rota com proteção nos casos de uso sensíveis.
+Casos de uso recebem um `AuthenticatedAccount` próprio, sem depender de tipos do Spring Security.
 
 **Rationale**: BCrypt já é suportado pelo Spring Security, inclui salt e evita uma dependência
 criptográfica adicional. O encoder delegador permite evolução futura. A autorização em duas
@@ -81,7 +98,7 @@ erros de mapeamento.
 
 **Decision**: separar o início do login Google de cliente e de administradora, protegendo a intenção
 no `state`. A única administradora fica restrita ao `sub` Google autorizado e ao e-mail verificado da
-loja, ambos fornecidos por segredo operacional. O primeiro callback administrativo válido cria o
+loja, ambos fornecidos por configuração externa segura e nunca pelo frontend. O primeiro callback administrativo válido cria o
 `Account` `ADMIN` e a identidade externa em uma transação protegida pela constraint de uma única
 administradora. Não há senha administrativa nem endpoint de cadastro ou promoção.
 

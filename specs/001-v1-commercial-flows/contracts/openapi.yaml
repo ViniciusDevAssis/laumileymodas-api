@@ -61,6 +61,22 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /auth/csrf:
+    get:
+      tags: [Auth]
+      summary: Inicializa ou renova o token CSRF do frontend
+      operationId: getCsrfToken
+      security: []
+      responses:
+        '204':
+          description: >-
+            Cookie XSRF-TOKEN disponibilizado pelo CookieCsrfTokenRepository. Não autentica o
+            usuário e não emite access token, refresh token ou handoff.
+          headers:
+            Set-Cookie:
+              description: Cookie XSRF-TOKEN legível pelo frontend.
+              schema: { type: string }
+
   /auth/google/client:
     get:
       tags: [Auth]
@@ -94,25 +110,44 @@ paths:
           required: true
           schema: { type: string }
       responses:
+        '302':
+          description: >-
+            Handoff opaco configurado em cookie HttpOnly e redirecionamento para uma rota fixa do
+            frontend, de troca de login, conclusão de cadastro ou erro. Conflito entre sub inédito e
+            e-mail local existente segue para erro sem vínculo. Nenhum token é colocado na URL.
+          headers:
+            Location:
+              description: URL exata do frontend definida na configuração do backend.
+              schema: { type: string, format: uri }
+            Set-Cookie:
+              description: Cookie temporário de handoff; não contém access ou refresh token.
+              schema: { type: string }
+
+  /auth/google/exchange:
+    post:
+      tags: [Auth]
+      summary: Consome o handoff Google de uma conta existente
+      operationId: exchangeGoogleHandoff
+      security:
+        - oauthHandoffCookie: []
+          csrfToken: []
+      responses:
         '200':
-          description: Account local autenticado; refresh token configurado em cookie seguro
+          description: Access token devolvido no corpo e refresh token configurado em cookie seguro
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthTokenResponse' }
-        '202':
-          description: Novo cliente Google deve completar os dados obrigatórios antes de receber tokens
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/GoogleRegistrationRequired' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
 
   /auth/google/customers:
     post:
       tags: [Auth]
       summary: Completa o cadastro de um novo cliente autenticado pelo Google
       operationId: completeGoogleCustomerRegistration
+      security:
+        - oauthHandoffCookie: []
+          csrfToken: []
       requestBody:
         required: true
         content:
@@ -126,6 +161,7 @@ paths:
               schema: { $ref: '#/components/schemas/AuthTokenResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
   /auth/refresh:
@@ -135,6 +171,7 @@ paths:
       operationId: refreshAccessToken
       security:
         - refreshCookie: []
+          csrfToken: []
       responses:
         '200':
           description: Novo par emitido; o refresh token anterior não pode ser reutilizado
@@ -142,6 +179,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AuthTokenResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /auth/logout:
     post:
@@ -150,9 +188,11 @@ paths:
       operationId: logout
       security:
         - refreshCookie: []
+          csrfToken: []
       responses:
         '204': { description: Refresh tokens revogados e cookie removido }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /auth/me:
     get:
@@ -790,6 +830,15 @@ components:
       type: apiKey
       in: cookie
       name: LAUMILEY_REFRESH
+    oauthHandoffCookie:
+      type: apiKey
+      in: cookie
+      name: LAUMILEY_OAUTH_HANDOFF
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-XSRF-TOKEN
+      description: Valor correspondente ao cookie legível XSRF-TOKEN obtido em GET /auth/csrf.
 
   parameters:
     Page:
@@ -936,23 +985,11 @@ components:
         tokenType: { type: string, const: Bearer }
         expiresIn: { type: integer, description: Segundos restantes do access token. }
         account: { $ref: '#/components/schemas/CurrentAccount' }
-    GoogleRegistrationRequired:
-      type: object
-      required: [registrationToken, email, expiresIn]
-      properties:
-        registrationToken:
-          type: string
-          description: Credencial curta que permite apenas completar o cadastro CLIENT.
-        email: { type: string, format: email }
-        givenName: { type: [string, 'null'] }
-        familyName: { type: [string, 'null'] }
-        expiresIn: { type: integer, description: Segundos restantes para completar o cadastro. }
     GoogleCustomerRegistrationRequest:
       type: object
       additionalProperties: false
-      required: [registrationToken, firstName, lastName, whatsappPhone]
+      required: [firstName, lastName, whatsappPhone]
       properties:
-        registrationToken: { type: string, writeOnly: true }
         firstName: { type: string, minLength: 1, maxLength: 100 }
         lastName: { type: string, minLength: 1, maxLength: 100 }
         whatsappPhone: { type: string, maxLength: 20, description: Número normalizável para E.164. }
