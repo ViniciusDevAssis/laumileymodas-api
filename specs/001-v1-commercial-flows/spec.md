@@ -1,10 +1,15 @@
 # Feature Specification: Operação Comercial V1
 
-**Feature Branch**: não criada
-**Created**: 2026-09-18
-**Status**: Draft
-**Input**: Catálogo público, identificação de clientes, registro de interesse com continuidade no WhatsApp,
+**Feature Branch**: não criada **Created**: 2026-09-18 **Status**: Draft **Input**: Catálogo público, identificação de
+clientes, registro de interesse com continuidade no WhatsApp,
 administração do catálogo e CRM inicial para a Laumiley Modas.
+
+## Clarifications
+
+### Session 2026-09-19
+
+- Q: Na V1, quando a administradora poderá iniciar um contato comercial com um cliente? → A: Também para contatos
+  comerciais proativos, desde que o cliente tenha autorizado e possa retirar a autorização.
 
 ## User Scenarios & Testing
 
@@ -130,6 +135,14 @@ consultando essas informações no contexto do mesmo cliente.
    **Then** ele continua pendente e é identificado como vencido.
 5. **Given** que um lembrete foi atendido, **When** a administradora o conclui, **Then** ele deixa de aparecer como
    pendente sem perder o contexto do relacionamento.
+6. **Given** que um cliente autorizou contatos comerciais proativos, **When** a administradora consulta seu contexto,
+   **Then** consegue verificar que a autorização está vigente antes de planejar o contato.
+7. **Given** que um cliente retirou a autorização, **When** a administradora consulta seu contexto ou seus lembretes,
+   **Then** o cliente não é apresentado como elegível para novo contato proativo e os lembretes dessa finalidade são
+   identificados como não acionáveis.
+8. **Given** que um cliente possui autorização vigente para contatos comerciais proativos, **When** ele retira essa
+   autorização, **Then** o sistema registra a retirada e o cliente deixa de ser elegível para novos contatos proativos,
+   sem impedir atendimentos iniciados por ele próprio.
 
 ## Edge Cases
 
@@ -146,6 +159,8 @@ consultando essas informações no contexto do mesmo cliente.
 * Se não houver clientes, contatos, interesses ou lembretes, a área correspondente deve apresentar um estado vazio
   compreensível.
 * Um lembrete vencido não deve desaparecer ou ser concluído automaticamente.
+* Se o cliente retirar a autorização para contatos proativos, lembretes pendentes dessa finalidade devem ser
+  identificados como não acionáveis, sem apagar contatos históricos nem impedir o atendimento solicitado pelo cliente.
 * Tentativas de acesso de clientes ou visitantes às informações administrativas devem ser negadas sem revelar conteúdo
   protegido.
 
@@ -260,6 +275,19 @@ consultando essas informações no contexto do mesmo cliente.
 * **FR-060**: A V1 NÃO DEVE enviar automaticamente lembretes, ofertas ou mensagens personalizadas aos clientes.
 * **FR-061**: A V1 NÃO DEVE incluir funcionalidades futuras de personalização ou automação que não estejam
   explicitamente definidas nesta especificação.
+* **FR-062**: O sistema DEVE permitir que o cliente autorize explicitamente contatos comerciais proativos iniciados pela
+  loja. A autorização NÃO DEVE ser concedida por padrão e DEVE depender de uma ação afirmativa do cliente.
+* **FR-063**: A autorização para contatos proativos DEVE ser opcional e independente do cadastro e da demonstração de
+  interesse; sua ausência NÃO DEVE impedir o atendimento solicitado pelo próprio cliente.
+
+- **FR-064**: O cliente DEVE conseguir retirar, a qualquer momento, a autorização para contatos comerciais proativos.
+
+* **FR-065**: A administradora DEVE conseguir consultar se a autorização do cliente para contatos proativos está
+  vigente.
+* **FR-066**: Clientes sem autorização vigente NÃO DEVEM ser apresentados como elegíveis para novos contatos comerciais
+  proativos.
+* **FR-067**: Quando uma autorização for retirada, lembretes pendentes destinados a contato proativo DEVEM ser
+  identificados como não acionáveis, sem apagar o histórico de contatos ou impedir atendimentos iniciados pelo cliente.
 
 ## Success Criteria
 
@@ -291,6 +319,12 @@ consultando essas informações no contexto do mesmo cliente.
 * **SC-016**: O catálogo não apresenta preço, estoque ou tamanhos como informações controladas pela aplicação.
 * **SC-017**: Falhas em autenticação, imagens ou encaminhamento ao WhatsApp não produzem interesses duplicados nem
   deixam o sistema em estado inconsistente.
+* **SC-018**: Cadastro, autenticação, consulta ao catálogo e demonstração de interesse continuam disponíveis quando o
+  cliente não autoriza contatos comerciais proativos.
+* **SC-019**: Nenhum cliente sem autorização vigente é apresentado à administradora como elegível para novo contato
+  comercial proativo.
+* **SC-020**: A retirada da autorização torna não acionáveis os lembretes pendentes de contato proativo sem apagar o
+  histórico comercial do cliente.
 
 ## Assumptions
 
@@ -308,6 +342,8 @@ consultando essas informações no contexto do mesmo cliente.
   no contexto do cliente.
 * Os lembretes são criados e concluídos manualmente pela administradora.
 * A V1 não envia notificações ou mensagens automáticas aos clientes.
+* A autorização para contatos comerciais proativos é distinta do atendimento solicitado pelo cliente ao demonstrar
+  interesse em um produto.
 * Um lembrete vencido continua sendo funcionalmente um lembrete pendente até sua conclusão manual.
 * O funcionamento do encaminhamento depende da disponibilidade do WhatsApp no dispositivo ou navegador do cliente.
 * A gestão técnica do armazenamento das imagens segue a Constitution e não redefine o comportamento funcional descrito
