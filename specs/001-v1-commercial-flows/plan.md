@@ -11,21 +11,23 @@ verdade para contas, catálogo e CRM. O sistema seguirá as responsabilidades `p
 `application`, `domain` e `infrastructure`; controllers chamarão casos de uso concretos e apenas
 dependências externas ou de persistência receberão portas próprias.
 
-A autenticação usará sessões opacas persistidas no PostgreSQL, com autorização por `CLIENT` e
-`ADMIN`. Imagens serão recebidas pela API, armazenadas no Cloudinary por um adapter de
+A autenticação usará Spring Security, access tokens JWT próprios e refresh tokens rotativos, com
+login de clientes por e-mail/senha ou Google OpenID Connect e login da única `ADMIN` somente pela
+identidade Google autorizada da loja. Imagens serão recebidas pela API, armazenadas no Cloudinary por um adapter de
 `infrastructure` e referenciadas localmente por URL e identificador externo. Interesses serão
-idempotentes e retornarão um link do WhatsApp gerado pelo backend após a persistência.
+idempotentes, criarão atomicamente seu lembrete e `ContactRecord` pendente e retornarão um link do
+WhatsApp gerado pelo backend após a persistência.
 
 ## Technical Context
 
 **Language/Version**: Kotlin 2.3.21 executando em Java 21
 
 **Primary Dependencies**: Spring Boot 3.5.16, Spring Web MVC, Spring Validation, Spring Security,
-Spring Session JDBC, Spring Data JPA, Flyway, PostgreSQL Driver, Jackson Kotlin e Cloudinary Java
-SDK restrito à infraestrutura
+Spring Security OAuth2 Client, Spring Security OAuth2 Resource Server/JOSE, Spring Data JPA, Flyway,
+PostgreSQL Driver, Jackson Kotlin e Cloudinary Java SDK restrito à infraestrutura
 
-**Storage**: PostgreSQL para dados e sessões; Cloudinary para o conteúdo das imagens; nenhum binário
-de imagem no banco ou no sistema de arquivos da aplicação
+**Storage**: PostgreSQL para dados, identidades externas e refresh tokens; Cloudinary para o conteúdo
+das imagens; nenhum binário de imagem no banco ou no sistema de arquivos da aplicação
 
 **Testing**: JUnit 5, Kotlin Test, Spring Boot Test, Spring Security Test, MockMvc, Testcontainers com
 PostgreSQL e adapters falsos para integrações externas
@@ -38,9 +40,10 @@ PostgreSQL e adapters falsos para integrações externas
 upload com p95 de até 1 s sob a carga inicial; latência de upload é medida separadamente por depender
 do provedor externo
 
-**Constraints**: uma única aplicação backend; uma conta administrativa; sessões de 30 minutos de
-inatividade; paginação máxima de 100 itens; uploads somente de imagens em formatos permitidos e com
-limite configurável; nenhum preço, estoque, tamanho, checkout, pagamento ou automação comercial
+**Constraints**: uma única aplicação backend; uma conta administrativa vinculada exclusivamente à
+identidade Google autorizada; access token de curta duração e refresh token rotativo; paginação
+máxima de 100 itens; uploads somente de imagens em formatos permitidos e com limite configurável;
+nenhum preço, estoque, tamanho, checkout, pagamento ou automação comercial
 
 **Scale/Scope**: uma instância de aplicação na V1, dezenas de acessos concorrentes, até 10 mil
 clientes, 5 mil produtos e histórico compatível com uma única loja; os limites são premissas de
@@ -55,7 +58,7 @@ capacidade, não novos requisitos funcionais
 | Spec First | PASS | O plano deriva de `spec.md`; nenhuma regra funcional nova substitui a specification. |
 | Simplicidade da V1 | PASS | Um monólito, uma base PostgreSQL e integrações síncronas; sem mensageria, CQRS ou microsserviços. |
 | Backend como autoridade | PASS | Autorização, invariantes, idempotência e mudanças de estado são aplicadas nos casos de uso. |
-| Segurança e privacidade | PASS | Sessão protegida, papéis mínimos, consentimento opt-in e respostas sem dados sensíveis. |
+| Segurança e privacidade | PASS | JWT de curta duração, refresh token rotativo, conta Google administrativa restrita, papéis mínimos, consentimento opt-in e respostas sem dados sensíveis. |
 | Regras testáveis | PASS | Regras de catálogo, interesse, autorização, consentimento e lembretes têm estratégia de testes. |
 | Integrações isoladas | PASS | Cloudinary e geração do link do WhatsApp ficam atrás de adapters de `infrastructure`. |
 | Responsabilidades claras | PASS | As quatro responsabilidades têm contratos explícitos e casos de uso pequenos. |
@@ -69,7 +72,9 @@ Não há violações que bloqueiem a pesquisa ou exijam exceção à Constitutio
 
 ### `presentation`
 
-- Expõe controllers REST, requests, responses, paginação e `ProblemDetail`.
+- Expõe controllers REST, requests, responses, paginação e o payload próprio `ApiErrorResponse`.
+- Centraliza exceptions HTTP no `GlobalExceptionHandler`; validação, `AuthenticationEntryPoint` e
+  `AccessDeniedHandler` escrevem o mesmo contrato de erro.
 - Converte multipart em um tipo neutro de conteúdo antes de chamar `application`.
 - Obtém a identidade do principal autenticado; nunca aceita do cliente um papel ou identidade para
   decidir autorização.
@@ -89,15 +94,15 @@ Não há violações que bloqueiem a pesquisa ou exijam exceção à Constitutio
 ### `domain`
 
 - Mantém modelos Kotlin e regras para status de produto, imagens principais, idempotência do
-  interesse, consentimento e estados de lembrete.
+  interesse, consentimento e estados coordenados de `ContactRecord` e lembrete.
 - Não depende de Spring, HTTP, JPA, Cloudinary ou formatos de resposta.
 - Usa entidades e value objects somente onde protegem uma regra; projeções de leitura simples não
   precisam virar agregados ricos.
 
 ### `infrastructure`
 
-- Implementa persistência JPA/PostgreSQL, migrations, Spring Security, Spring Session JDBC,
-  Cloudinary, configuração e geração da URL do WhatsApp.
+- Implementa persistência JPA/PostgreSQL, migrations, Spring Security, validação dos JWT próprios,
+  cliente Google OpenID Connect, Cloudinary, configuração e geração da URL do WhatsApp.
 - Converte modelos persistidos e respostas de fornecedor para tipos definidos pela aplicação.
 - Mantém credenciais exclusivamente em configuração externa e sanitiza logs de integrações.
 
@@ -109,10 +114,17 @@ seus limites como contratos públicos.
 
 ### Identidade e cliente
 
-- `RegisterCustomer`: normaliza e-mail/telefone, cria somente papel `CLIENT`, codifica a senha e
-  inicia o consentimento proativo como não autorizado.
-- `Login` e `Logout`: autenticam credenciais, criam ou invalidam sessão e não revelam qual dado foi
+- `RegisterCustomerWithPassword`: normaliza e-mail/telefone, cria somente papel `CLIENT`, codifica a
+  senha e inicia o consentimento proativo como não autorizado.
+- `LoginWithPassword`: autentica somente contas com credencial local e não revela qual dado foi
   incorreto.
+- `CompleteGoogleLogin`: valida a identidade Google, autentica conta já vinculada ou emite uma
+  credencial curta para completar o cadastro de cliente; no fluxo administrativo, cria/autentica o
+  `Account` próprio e impede elevação quando o `sub` não corresponde à conta autorizada.
+- `CompleteGoogleCustomerRegistration`: valida o registration token e os dados obrigatórios e cria
+  `Account`, identidade Google e `Customer` atomicamente antes de emitir access/refresh.
+- `IssueTokenPair`, `RefreshAccessToken` e `Logout`: emitem access token JWT, rotacionam refresh token
+  de uso único e revogam a credencial renovável atual.
 - `GetCurrentCustomer`: retorna a visão pessoal mínima do principal autenticado.
 - `SetProactiveContactConsent`: registra opt-in afirmativo ou revogação do próprio cliente e faz a
   nova elegibilidade valer imediatamente.
@@ -131,8 +143,9 @@ seus limites como contratos públicos.
 
 ### Interesse e WhatsApp
 
-- `RegisterProductInterest`: exige `CLIENT`, valida produto ativo, aplica idempotência por
-  confirmação, persiste o interesse e devolve o link do WhatsApp após o commit.
+- `RegisterProductInterest`: exige `CLIENT`, valida produto ativo e aplica idempotência por
+  confirmação; na mesma transação persiste o interesse, um lembrete acionável de acompanhamento e
+  um `ContactRecord` pendente relacionado aos dois, e devolve o link do WhatsApp após o commit.
 - `GetInterestWhatsAppLink`: permite ao próprio cliente recuperar o link de um interesse já criado
   sem gerar outro registro.
 
@@ -141,9 +154,13 @@ seus limites como contratos públicos.
 - `SearchCustomers` e `GetCustomerContext`: fornecem à administradora a base, consentimento vigente
   e contexto necessário, sem expor esses dados a clientes.
 - `ListCustomerInterests`: lista interesses de um cliente em ordem cronológica.
-- `RecordContact` e `ListContactHistory`: mantêm o histórico manual.
-- `CreateReminder`, `ListPendingReminders` e `CompleteReminder`: mantêm lembretes manuais; atraso e
-  acionabilidade são derivados no momento da leitura.
+- `RecordContact` e `ListCustomerContacts`: mantêm contatos manuais e listam separadamente registros
+  pendentes e concluídos.
+- `CompletePendingContactRecord`: exige dados finais do atendimento, conclui o `ContactRecord` e o
+  lembrete automático relacionado na mesma transação.
+- `CreateReminder`, `ListPendingReminders` e `CompleteManualReminder`: mantêm lembretes manuais;
+  atraso e acionabilidade são derivados no momento da leitura. O lembrete automático não aceita
+  conclusão independente.
 - Lembrete com propósito `PROACTIVE_CONTACT` só é acionável com consentimento vigente. O propósito
   `CUSTOMER_REQUEST_FOLLOW_UP` permanece acionável porque responde a uma iniciativa do cliente.
 
@@ -152,36 +169,68 @@ automático de comunicação será criado na V1.
 
 ## Authentication and Authorization Strategy
 
-- Spring Security autenticará e-mail e senha e persistirá o contexto em sessão opaca via Spring
-  Session JDBC. REST não exige autenticação stateless, e essa escolha evita refresh tokens e listas
-  próprias de revogação.
-- O cookie de sessão será `HttpOnly`, `Secure` em produção, `SameSite=Lax`, limitado ao host e sem
-  `Max-Age`. CSRF continuará habilitado para toda operação mutável, inclusive login, logout e
-  upload; CORS aceitará somente origens configuradas explicitamente.
+- Spring Security autenticará a API de forma stateless pelo header `Authorization: Bearer`. A
+  aplicação assinará access tokens JWT assimétricos e validará assinatura, algoritmo, `iss`, `aud`,
+  `exp` e `nbf`. O token terá duração inicial de 15 minutos e conterá somente `sub` com o ID do
+  `Account`, papel, `iat`, `exp` e `jti`; e-mail e dados do cliente não serão claims.
+- A chave privada de assinatura e as chaves públicas de validação virão de segredos externos, nunca
+  do repositório ou banco. O header `kid` identificará a chave ativa; uma rotação operacional poderá
+  manter a chave pública anterior apenas durante a janela máxima dos tokens já emitidos. CORS
+  aceitará somente origens configuradas explicitamente.
+- O refresh token também será um JWT próprio, com `typ=refresh`, `sub`, `jti`, `family_id`, `iat` e
+  `exp`, duração inicial de 30 dias e hash do `jti` persistido. Será enviado apenas em cookie
+  `HttpOnly`, `Secure` em produção, `SameSite=Strict` e
+  `Path=/api/v1/auth`; `/auth/refresh` e `/auth/logout` aceitarão somente `POST` e validarão a origem
+  configurada. Cada uso rotaciona o token em uma transação e invalida o anterior; reuso revoga toda
+  a família. Logout revoga a família atual e remove o cookie. Access tokens já emitidos permanecem
+  válidos até o curto `exp`, sem blacklist na V1.
 - Senhas serão armazenadas pelo `DelegatingPasswordEncoder` usando BCrypt com custo inicial 12,
   calibrado no ambiente. A entrada será limitada a 64 caracteres e 72 bytes UTF-8 para não exceder
-  o limite seguro do BCrypt. Senha, hash e credenciais nunca entram em respostas ou logs.
-- A sessão expira após 30 minutos de inatividade. Logout, redefinição operacional da senha
-  administrativa ou desativação futura invalidam as sessões do principal.
-- A matriz é: catálogo e obtenção de CSRF públicos; cadastro e login públicos com CSRF; interesse e
-  consentimento para `CLIENT`; catálogo administrativo e CRM para `ADMIN`; negação por padrão para
-  qualquer rota não classificada.
-- `401` representa ausência ou falha de autenticação; `403`, papel autenticado sem permissão. Erros
-  de login são genéricos para impedir enumeração de contas.
-- Uma limitação simples e configurável de tentativas de login por origem e e-mail será mantida na
-  instância local, sem bloqueio permanente e sem infraestrutura distribuída.
+  o limite seguro do BCrypt. Senha, hash, tokens e credenciais nunca entram em respostas ou logs.
+- O login Google usará OAuth 2.0 Authorization Code com OpenID Connect pelo Spring Security OAuth2
+  Client. A aplicação validará `state`, nonce, assinatura, emissor, audiência, expiração e
+  `email_verified`, identificará a pessoa por `(provider=GOOGLE, subject=sub)` e nunca aceitará token
+  Google como credencial da API. Após o callback, ela trabalhará com o `Account` local e emitirá o
+  mesmo par access/refresh da autenticação por senha.
+- A requisição de autorização Google será mantida apenas durante o handshake em cookie curto,
+  assinado/cifrado, `HttpOnly`, `Secure` em produção e `SameSite=Lax`, sem sessão persistida no
+  servidor. Quando um novo cliente ainda precisar informar telefone, o callback emitirá um
+  registration token JWT de
+  uso restrito e duração de 10 minutos; somente após completar os dados serão emitidos access e
+  refresh tokens.
+- O início do OAuth é explícito para cliente ou administradora e a intenção é protegida no `state`.
+  No fluxo administrativo, qualquer identidade que não corresponda ao `sub` e e-mail autorizados é
+  negada, sem cair no cadastro de cliente. Para `CLIENT`, uma identidade Google inédita só cria
+  `Account`, identidade externa e `Customer`, com consentimento proativo negado, depois que os dados
+  obrigatórios ausentes, como telefone, forem coletados. Um Google `sub` já vinculado autentica a
+  conta existente. E-mail Google
+  verificado só poderá vincular uma conta `CLIENT` existente em fluxo transacional sem conflito; uma
+  tentativa de vincular ou assumir `ADMIN` por coincidência de e-mail será negada.
+- A matriz é: catálogo, cadastro, login, início/callback Google e refresh públicos nos limites de
+  cada fluxo; interesse e consentimento para `CLIENT`; catálogo administrativo e CRM para `ADMIN`;
+  negação por padrão para qualquer rota não classificada. Regras contextuais também permanecem nos
+  casos de uso.
+- `401` representa autenticação ausente, inválida ou expirada; `403`, papel autenticado sem permissão.
+  O `AuthenticationEntryPoint` e o `AccessDeniedHandler` usam o mesmo `ApiErrorResponse` do restante
+  da API. Erros de login e OAuth são genéricos para impedir enumeração de contas.
+- Uma limitação simples e configurável de tentativas de login por origem e identificador será
+  mantida na instância local, sem bloqueio permanente e sem infraestrutura distribuída.
 
 ### Provisionamento da única administradora
 
-Um comando operacional no mesmo artefato será ativado apenas por perfil explícito de bootstrap. Ele
-receberá e-mail e senha por segredo do ambiente, codificará a senha e criará `ADMIN` em uma
-transação somente quando nenhuma conta administrativa existir. Não haverá endpoint de criação de
-administradores, credencial padrão ou senha em migration.
+A identidade administrativa será configurada por segredos operacionais contendo o `sub` Google
+autorizado e o e-mail esperado da loja. Não haverá senha administrativa, endpoint de cadastro de
+administrador, credencial padrão ou segredo em migration. No primeiro callback Google válido que
+corresponder simultaneamente ao `sub` autorizado e ao e-mail verificado esperado, a aplicação cria,
+em transação, o único `Account` `ADMIN` e sua identidade externa; callbacks posteriores autenticam
+essa mesma conta.
 
-Uma restrição parcial única no PostgreSQL garantirá no máximo uma conta `ADMIN`, inclusive em
-execuções concorrentes. Se já existir administradora, o comando falhará sem alterá-la. Após o
-primeiro uso, o perfil será desabilitado e o segredo inicial removido. Um comando operacional
-separado poderá redefinir a senha e invalidar todas as sessões da administradora.
+Uma restrição parcial única no PostgreSQL garantirá no máximo uma conta `ADMIN`, e a unicidade de
+`(provider, subject)` impedirá reutilização da identidade. No fluxo administrativo, qualquer outro
+`sub`, inclusive com e-mail parecido ou já cadastrado como cliente, recebe acesso negado e nunca é
+promovido. Alterar a conta Google autorizada exige procedimento operacional explícito e revogação
+das famílias de refresh
+tokens da administradora.
 
 ## Persistence and Migration Strategy
 
@@ -191,16 +240,17 @@ separado poderá redefinir a senha e invalidar todas as sessões da administrado
   serão alteradas.
 - IDs serão UUIDs gerados pela aplicação, e datas serão persistidas como instantes UTC em
   `timestamptz`.
-- A ordem inicial será: `V1` identidade/clientes/consentimento; `V2` catálogo/imagens; `V3`
-  interesses/CRM; `V4` tabelas oficiais do Spring Session e índices operacionais.
+- A ordem inicial será: `V1` contas/clientes/identidades externas/consentimento e refresh tokens;
+  `V2` catálogo/imagens; `V3` interesses/CRM e vínculos do acompanhamento; `V4` índices operacionais.
 - Restrições do banco cobrirão e-mail normalizado único, uma administradora, nomes normalizados de
   categoria, identificador externo de mídia único, no máximo uma imagem principal por produto,
-  chaves estrangeiras e idempotência do interesse.
+  chaves estrangeiras, identidade externa única, refresh token único, idempotência do interesse e
+  um único conjunto automático de acompanhamento por interesse.
 - Regras entre linhas que exigiriam triggers, como “produto tem ao menos uma imagem”, permanecerão
   no domínio e no caso de uso. Operações concorrentes de mídia bloquearão a linha do produto
   durante a transação.
 - Listagens serão paginadas e usarão índices por status do produto, cliente/data de interesse,
-  cliente/data do contato e status/data do lembrete.
+  cliente/status/data do contato e status/data do lembrete.
 
 ## Cloudinary Consistency Strategy
 
@@ -226,21 +276,45 @@ persistente só será adicionado mediante necessidade operacional concreta.
 ## WhatsApp Strategy
 
 - O backend gera `https://wa.me/{numeroE164}?text={mensagemCodificada}`; não há chamada à API do
-  WhatsApp na V1.
+  WhatsApp, uso de WhatsApp Business API ou envio automático de mensagens na V1.
 - Número e texto-base vêm de configuração validada na inicialização. A requisição nunca fornece
   destino ou URL de redirecionamento.
 - A mensagem inclui apenas nome e referência pública do produto, sem e-mail, telefone, token ou
   dados do CRM. Conteúdo variável é codificado e limitado.
-- O interesse é confirmado antes da geração da resposta. Falha ao abrir o aplicativo não desfaz o
-  registro; repetir a mesma chave idempotente ou consultar o interesse recupera o mesmo contexto.
+- A confirmação persiste `Interest`, `Reminder` e `ContactRecord` pendente na mesma transação antes
+  da geração da resposta. Uma constraint única por `interest_id` em cada acompanhamento é a última
+  barreira contra concorrência; repetir a chave idempotente ou consultar o interesse recupera o
+  mesmo contexto sem novos registros.
+- O lembrete automático nasce como `CUSTOMER_REQUEST_FOLLOW_UP`, imediatamente acionável mesmo sem
+  consentimento proativo, e mantém canal WhatsApp, data, cliente, identificador e produto por meio
+  dos vínculos persistidos. O `ContactRecord` continua `PENDING` e não compõe o histórico concluído
+  até a administradora registrar data efetiva, descrição e resultado do atendimento.
+- Ao finalizar o `ContactRecord`, o caso de uso bloqueia os dois registros e conclui o lembrete na
+  mesma transação. O endpoint de conclusão manual de lembrete rejeita lembretes automáticos.
+- O consentimento proativo continua modelado para CRM e possíveis versões futuras, mas não aciona
+  API de mensagens nem automação nesta versão.
 
 ## REST Contract Strategy
 
 O contrato canônico será [contracts/openapi.yaml](./contracts/openapi.yaml): prefixo `/api/v1`, JSON
-UTF-8, multipart para mídia, datas ISO-8601, IDs opacos, paginação determinística e
-`application/problem+json` para erros. A chave `Idempotency-Key` será obrigatória na confirmação do
-interesse; sua repetição pelo mesmo cliente e produto devolve o resultado existente, e reutilização
-para outro produto retorna conflito.
+UTF-8, Bearer JWT, multipart para mídia, datas ISO-8601, IDs opacos, paginação determinística e
+`application/json` com `ApiErrorResponse` para erros. A chave `Idempotency-Key` será obrigatória na
+confirmação do interesse; sua repetição pelo mesmo cliente e produto devolve o resultado existente,
+e reutilização para outro produto retorna conflito.
+
+O padrão de exceções preservará a identidade adotada no Fidelizei: catálogos de erros por contexto e
+pela camada que é dona da falha,
+cada item com código estável e mensagem segura; exceptions específicas carregando um erro;
+`GlobalExceptionHandler` como tradutor central; e um único payload `ApiErrorResponse` com
+`timestamp`, `status`, `code`, `message`, `path`, `traceId` opcional e `errors` para violações de
+campos. Códigos terão prefixos globais por contexto (`AUTH_`, `ACCOUNT_`, `CATALOG_`, `MEDIA_`,
+`INTEREST_`, `CRM_`, `VALIDATION_`, `SECURITY_`, `INTERNAL_`) e unicidade verificada por teste.
+Exceptions de `domain` carregam somente tipos e erros declarados em `domain`; exceptions de
+`application` carregam somente seu catálogo e podem traduzir uma falha do domínio sem criar a
+dependência inversa. Falhas técnicas da infraestrutura são traduzidas no limite do caso de uso e não
+vazam para o contrato HTTP. `presentation` conhece esses erros apenas para mapeá-los. Erros
+inesperados retornam `INTERNAL_001`, HTTP 500 e mensagem genérica, registrando detalhes apenas no
+servidor.
 
 O contrato não terá operações públicas de preço, estoque, tamanho, checkout, administração ou
 criação de `ADMIN`. Produtos/categorias não terão exclusão porque a specification não define esses
@@ -251,10 +325,13 @@ fluxos.
 ### Unit tests
 
 - Domínio: ativação do produto, quantidade de principais, remoção/troca de imagem, status de
-  lembrete, vencimento e consentimento.
+  lembrete, transição do contato pendente, conclusão coordenada e consentimento.
 - Aplicação: idempotência do interesse, derivação da identidade do principal, opt-in/revogação,
-  acionabilidade de lembretes e compensações de mídia em cada ponto de falha.
+  criação atômica de acompanhamento, acionabilidade de lembretes, conclusão conjunta e compensações
+  de mídia em cada ponto de falha.
 - Infraestrutura pura: geração segura do link WhatsApp, normalização e codificação de valores.
+- Segurança: emissão/validação de claims JWT, rotação e detecção de reuso de refresh token, mapeamento
+  do Google `sub`, recusa de elevação administrativa e unicidade global dos códigos de erro.
 - Fakes pequenos substituirão ports; não serão testados getters, mapeamentos triviais ou detalhes do
   framework sem risco comportamental.
 
@@ -262,22 +339,28 @@ fluxos.
 
 - `@SpringBootTest`, MockMvc e PostgreSQL real via Testcontainers; H2 não será usado.
 - Flyway deve construir um banco vazio e Hibernate deve validar o schema.
-- O bootstrap deve criar uma única administradora, rejeitar segunda execução e falhar sem segredo
-  válido; a constraint parcial será testada também sob concorrência.
-- Matriz anônimo/`CLIENT`/`ADMIN`, sessão, CSRF, logout, expiração, respostas `401`/`403` e negação
-  padrão.
+- O callback Google autorizado deve criar/autenticar uma única administradora; outro `sub`, mesmo
+  com e-mail semelhante, deve receber negação. A constraint parcial será testada sob concorrência.
+- Matriz anônimo/`CLIENT`/`ADMIN`, login local e Google, Bearer JWT válido/expirado/adulterado,
+  refresh rotativo, logout, respostas `401`/`403` e negação padrão.
 - Restrições, transações, paginação, idempotência concorrente e invariantes de imagem serão testadas
   no PostgreSQL.
+- Concorrência e retry da confirmação devem produzir exatamente um `Interest`, um `Reminder` e um
+  `ContactRecord`; concluir o contato deve concluir o lembrete no mesmo commit, e rollback deve
+  preservar ambos pendentes.
 - O port de mídia será falso nos testes de fluxo; o adapter Cloudinary terá teste isolado com client
   simulado, sem rede ou segredo no CI.
-- Cenários de contrato validarão JSON, multipart, `ProblemDetail`, datas e ausência de dados
-  sensíveis.
+- Cenários de contrato validarão JSON, multipart, `ApiErrorResponse`, validações de campo, erros do
+  Spring Security, fallback 500, datas, URLs de todas as imagens e ausência de dados sensíveis.
+- Testcontainers exige Docker somente durante a suíte de integração; executar a aplicação pela IDE
+  continua permitido com um PostgreSQL configurado, sem containerizar o backend.
 
 ### End-to-end validation
 
-[quickstart.md](./quickstart.md) cobrirá catálogo anônimo, cadastro/login, interesse e WhatsApp,
-administração de catálogo, CRM, consentimento e autorização negativa. Todos os testes e migrations
-devem passar antes da funcionalidade ser considerada concluída.
+[quickstart.md](./quickstart.md) cobrirá catálogo anônimo, cadastro/login local e Google, rotação de
+tokens, interesse/WhatsApp/acompanhamento, administração de catálogo, CRM, consentimento e
+autorização negativa. Todos os testes e migrations devem passar antes da funcionalidade ser
+considerada concluída.
 
 ## Project Structure
 
@@ -348,7 +431,7 @@ físicos, serviços separados ou hierarquias de ports/interfaces além das depen
 
 ## Post-Design Constitution Check
 
-Todos os gates permanecem `PASS` após o desenho. O modelo não adiciona venda, automação,
+Todos os gates permanecem `PASS` após o desenho. O modelo não adiciona venda, API de mensagens, automação,
 microsserviço de mídia ou dependência do domínio em fornecedor. A autenticação, as migrations, a
 matriz de autorização e os testes tornam explícitas as exigências de segurança e qualidade.
 
@@ -359,5 +442,6 @@ registra falhas de limpeza e prioriza não publicar referências quebradas.
 ## Complexity Tracking
 
 Nenhuma violação da Constitution exige justificativa. As dependências adicionais atendem requisitos
-concretos: Security/Session para autenticação revogável, JPA/PostgreSQL para persistência, Flyway
-para versionamento, Cloudinary para mídia e Testcontainers para validar comportamento real do banco.
+concretos: Spring Security OAuth2 Client/Resource Server para Google e JWT, JPA/PostgreSQL para
+persistência e refresh tokens, Flyway para versionamento, Cloudinary para mídia e Testcontainers
+para validar comportamento real do banco.

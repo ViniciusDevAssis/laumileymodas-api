@@ -13,8 +13,10 @@
 
 ### Identity and Customer
 
-`Account` representa credenciais e papel. `Customer` representa a pessoa e seu contexto de
-relacionamento. A única conta `ADMIN` não precisa de um registro `Customer`.
+`Account` representa a identidade e o papel internos. `AccountExternalIdentity` vincula uma conta ao
+Google sem transferir ao provedor a autoridade sobre papéis. `RefreshToken` representa uma
+credencial renovável rotativa. `Customer` representa a pessoa e seu contexto de relacionamento. A
+única conta `ADMIN` não precisa de um registro `Customer`.
 
 ### Catalog
 
@@ -28,8 +30,9 @@ ativo. Ele preserva o vínculo mesmo se o produto se tornar inativo depois.
 
 ### CRM
 
-`ContactRecord` registra contatos passados. `Reminder` representa uma ação futura e calcula atraso
-e acionabilidade usando data, estado, propósito e consentimento atual do cliente.
+`ContactRecord` representa tanto o registro pendente de um atendimento solicitado quanto um contato
+já concluído. `Reminder` representa uma ação futura e calcula atraso e acionabilidade usando data,
+estado, origem, propósito e consentimento atual do cliente.
 
 ## Persistent Models
 
@@ -40,7 +43,7 @@ e acionabilidade usando data, estado, propósito e consentimento atual do client
 | `id` | UUID | Primary key |
 | `email` | varchar(320) | Valor original normalizado para apresentação |
 | `normalized_email` | varchar(320) | Lowercase/trim, unique, required |
-| `password_hash` | varchar(255) | Hash com identificador do encoder, required |
+| `password_hash` | varchar(255) | Hash com identificador do encoder; nullable para conta somente Google |
 | `role` | varchar(20) | `CLIENT` ou `ADMIN`, required |
 | `enabled` | boolean | Default `true`; desativação não ganha fluxo público na V1 |
 | `created_at` | timestamptz | Required |
@@ -52,6 +55,40 @@ Constraints:
 - Check de papel limitado a `CLIENT` e `ADMIN`.
 - Índice único parcial para no máximo uma linha com `role = 'ADMIN'`.
 - Cadastro público sempre força `CLIENT`; papel recebido na entrada é ignorado/rejeitado.
+
+### `account_external_identity`
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | UUID | Primary key |
+| `account_id` | UUID | FK para `account`, required |
+| `provider` | varchar(30) | `GOOGLE` na V1, required |
+| `subject` | varchar(255) | Valor `sub` validado no provedor, required |
+| `email_at_link` | varchar(320) | E-mail verificado observado no vínculo, required |
+| `created_at` | timestamptz | Required |
+| `last_login_at` | timestamptz | Required |
+
+`UNIQUE(provider, subject)` impede que a mesma identidade autentique mais de uma conta. O papel nunca
+é derivado do e-mail: `ADMIN` só pode ser criado/autenticado quando `subject` e e-mail verificado
+correspondem à configuração operacional autorizada.
+
+### `refresh_token`
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | UUID | Primary key e identificador interno |
+| `account_id` | UUID | FK para `account`, required |
+| `family_id` | UUID | Identifica a cadeia de rotações, required |
+| `jti_hash` | varchar(255) | Hash do `jti` do refresh JWT, unique, required; token bruto nunca persistido |
+| `expires_at` | timestamptz | Required |
+| `consumed_at` | timestamptz | Preenchido no primeiro refresh; nullable |
+| `revoked_at` | timestamptz | Preenchido no logout, reuso ou revogação operacional; nullable |
+| `replaced_by_id` | UUID | FK nullable para o token sucessor |
+| `created_at` | timestamptz | Required |
+
+Um token é utilizável somente se não expirou, não foi consumido nem revogado e a conta está ativa.
+A rotação consome o atual e cria o sucessor na mesma transação. Reuso de token consumido revoga todos
+os tokens ainda ativos da família.
 
 ### `customer`
 
@@ -110,8 +147,9 @@ exatamente uma principal. Essas regras entre linhas ficam no domínio e no caso 
 | `created_at` | timestamptz | Required |
 
 Um índice único parcial em `product_id WHERE is_primary = true` garante no máximo uma principal. O
-caso de uso garante pelo menos uma. A URL e o identificador externo não são expostos juntos: o
-catálogo recebe somente URL, enquanto operações administrativas usam o ID interno da imagem.
+caso de uso garante pelo menos uma. Cada `ProductImage` mantém seu `Product`, URL, `externalId`, flag
+principal e ordem. Consultas de produto entregam ao frontend as URLs ordenadas; o identificador
+externo permanece interno e operações administrativas usam o ID local da imagem.
 
 ### `interest`
 
@@ -133,13 +171,21 @@ retorna conflito. Não há unicidade em cliente/produto, pois um novo interesse 
 |-------|------|-------|
 | `id` | UUID | Primary key |
 | `customer_id` | UUID | FK para `customer`, required |
-| `occurred_at` | timestamptz | Data informada da interação, required |
+| `interest_id` | UUID | FK unique nullable; preenchida no registro automático |
+| `reminder_id` | UUID | FK unique nullable; preenchida no registro automático |
+| `status` | varchar(20) | `PENDING` ou `COMPLETED`, required |
+| `occurred_at` | timestamptz | Data efetiva da interação; nullable enquanto pendente |
 | `channel` | varchar(80) | Texto controlado/validado, required |
-| `description` | varchar(2000) | Required, trimmed |
+| `description` | varchar(2000) | Nullable enquanto pendente; required e trimmed ao concluir |
+| `completed_at` | timestamptz | Required somente em `COMPLETED` |
 | `created_at` | timestamptz | Momento do registro, required |
+| `updated_at` | timestamptz | Required |
 
-Registros são manuais e ordenados por `occurred_at DESC, id DESC`. Edição e exclusão não fazem
-parte da V1.
+Registros manuais nascem `COMPLETED` com data, canal e descrição. O fluxo de interesse cria um
+registro `PENDING`, canal `WHATSAPP`, sem afirmar que houve conversa. Ao concluir, a administradora
+informa os dados finais e o registro passa ao histórico. Listagens distinguem status; concluídos são
+ordenados por `occurred_at DESC, id DESC`, e pendentes por `created_at DESC, id DESC`. Edição posterior,
+reabertura e exclusão não fazem parte da V1.
 
 ### `reminder`
 
@@ -147,9 +193,11 @@ parte da V1.
 |-------|------|-------|
 | `id` | UUID | Primary key |
 | `customer_id` | UUID | FK para `customer`, required |
+| `interest_id` | UUID | FK unique nullable; preenchida somente no acompanhamento automático |
 | `description` | varchar(1000) | Required, trimmed |
 | `due_at` | timestamptz | Required |
 | `purpose` | varchar(40) | `PROACTIVE_CONTACT` ou `CUSTOMER_REQUEST_FOLLOW_UP` |
+| `origin` | varchar(20) | `MANUAL` ou `INTEREST`, required |
 | `status` | varchar(20) | `PENDING` ou `COMPLETED`, required |
 | `completed_at` | timestamptz | Required somente em `COMPLETED` |
 | `created_at` | timestamptz | Required |
@@ -161,22 +209,23 @@ Derivations:
 - `actionable = status == PENDING && (purpose != PROACTIVE_CONTACT || customer consent is true)`.
 - Revogar consentimento não altera `status`; muda imediatamente `actionable` para `false` nos
   lembretes proativos.
-
-### Spring Session tables
-
-As tabelas oficiais `SPRING_SESSION` e `SPRING_SESSION_ATTRIBUTES` são infraestrutura, não entidades
-do domínio. Elas entram por migration Flyway e têm a inicialização automática do Spring Session
-desabilitada. Sessões são localizáveis pelo principal para logout e revogação operacional.
+- Um lembrete `INTEREST` usa `CUSTOMER_REQUEST_FOLLOW_UP`, nasce pendente e acionável com `due_at`
+  igual à data do interesse e só é concluído junto com seu `ContactRecord`.
 
 ## Relationships
 
 ```text
+Account 1 ─── 0..* AccountExternalIdentity
+Account 1 ─── 0..* RefreshToken
 Account 1 ─── 0..1 Customer
 Category 1 ─── * Product
 Product 1 ─── 1..* ProductImage
 Customer 1 ─── * Interest * ─── 1 Product
 Customer 1 ─── * ContactRecord
 Customer 1 ─── * Reminder
+Interest 1 ─── 1 Reminder (acompanhamento automático)
+Interest 1 ─── 1 ContactRecord (acompanhamento automático)
+Reminder 1 ─── 1 ContactRecord (quando originado por interesse)
 ```
 
 ## State Transitions
@@ -206,8 +255,28 @@ AUTHORIZED ── grant again ────────────────�
 PENDING ── complete ──> COMPLETED
 ```
 
-`OVERDUE` e `NOT_ACTIONABLE` são condições derivadas, não estados persistidos. Reabertura, edição e
-exclusão não pertencem à V1.
+`OVERDUE` e `NOT_ACTIONABLE` são condições derivadas, não estados persistidos. Lembrete `MANUAL` é
+concluído diretamente; lembrete `INTEREST` só muda para `COMPLETED` na transição conjunta do contato.
+Reabertura, edição e exclusão não pertencem à V1.
+
+### ContactRecord
+
+```text
+PENDING ── complete with occurredAt + description ──> COMPLETED
+```
+
+Contato manual nasce `COMPLETED`. Um contato automático nasce `PENDING`, vinculado ao interesse e
+ao lembrete, e sua conclusão também conclui esse lembrete. O estado pendente não é evidência de
+conversa realizada.
+
+### RefreshToken
+
+```text
+ACTIVE ── refresh ──> CONSUMED + successor ACTIVE
+ACTIVE ── logout/administrative revoke ──> REVOKED
+CONSUMED ── reuse detected ──> family REVOKED
+ACTIVE ── expires ──> EXPIRED (derived)
+```
 
 ### Interest
 
@@ -216,32 +285,43 @@ Interesse não muda de estado nem é removido na V1. A repetição idempotente r
 ## Transaction Boundaries
 
 - Conta e cliente são criados atomicamente.
+- Vínculo Google e eventual criação de `Account`/`Customer` são atômicos; a constraint da
+  administradora permanece a autoridade final contra concorrência.
+- Rotação consome o refresh token atual e cria seu sucessor em uma única transação com lock; detecção
+  de reuso revoga a família atomicamente.
 - Consentimento é alterado em uma transação curta; leituras de lembretes calculam acionabilidade
   com o valor já confirmado.
 - Produto e referências de todas as imagens da criação são persistidos juntos.
 - Troca de principal remove e define a flag na mesma transação, com lock no produto.
-- Interesse é persistido com a constraint de idempotência como autoridade final contra concorrência.
-- Conclusão do lembrete altera `status` e `completed_at` juntos.
+- Interesse, lembrete `INTEREST` e `ContactRecord` pendente são persistidos na mesma transação; as
+  constraints de idempotência e unicidade por interesse são a autoridade final contra concorrência.
+- Conclusão de `ContactRecord` automático preenche seus dados finais e altera contato e lembrete para
+  `COMPLETED`, com os dois `completed_at`, na mesma transação.
+- Conclusão direta de lembrete é permitida apenas para `origin = MANUAL`.
 
 ## Indexes
 
 - `account(normalized_email)` unique.
 - `account(role) WHERE role = 'ADMIN'` unique partial.
+- `account_external_identity(provider, subject)` unique e índice por `account_id`.
+- `refresh_token(jti_hash)` unique; índices por `account_id`, `family_id` e `expires_at`.
 - `category(normalized_name)` unique.
 - `product(status, created_at DESC)` para catálogo.
 - `product(category_id)` para gestão.
 - `product_image(product_id, display_order)` e índice parcial da principal.
 - `product_image(external_id)` unique.
 - `interest(customer_id, created_at DESC)` e unique de idempotência.
-- `contact_record(customer_id, occurred_at DESC)`.
+- `contact_record(interest_id)` e `contact_record(reminder_id)` unique quando não nulos;
+  `contact_record(customer_id, status, occurred_at DESC)`.
 - `reminder(status, due_at)` e `reminder(customer_id, due_at DESC)`.
+- `reminder(interest_id)` unique quando não nulo.
 
 ## Migration Plan
 
-1. `V1__create_identity_and_customers.sql`
+1. `V1__create_identity_customers_and_tokens.sql`
 2. `V2__create_catalog.sql`
-3. `V3__create_interests_and_crm.sql`
-4. `V4__create_spring_session_and_operational_indexes.sql`
+3. `V3__create_interests_crm_and_follow_up_links.sql`
+4. `V4__create_operational_indexes.sql`
 
 Após serem aplicadas fora do ambiente local descartável, migrations não são editadas. Qualquer
 ajuste recebe uma nova versão.

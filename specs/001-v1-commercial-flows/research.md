@@ -28,26 +28,37 @@ interesse, consentimento e lembrete.
 uma camada de repositório genérico. SQL manual ampliaria o trabalho da V1; expor JPA pela API
 acoplaria contratos; repositório genérico esconderia consultas específicas sem benefício concreto.
 
-## 3. Autenticação por sessão
+## 3. JWT, refresh token e Google OpenID Connect
 
-**Decision**: usar Spring Security com sessão opaca persistida no PostgreSQL por Spring Session JDBC.
-O identificador fica em cookie `HttpOnly`, `Secure` em produção e `SameSite=Lax`; CSRF permanece
-habilitado em comandos. A sessão expira após 30 minutos de inatividade.
+**Decision**: usar Spring Security de forma stateless para a API. A aplicação emite access token JWT
+assinado assimetricamente, válido inicialmente por 15 minutos, e refresh token JWT próprio, com tipo
+e audiência distintos, válido por 30 dias. O hash do `jti` do refresh é persistido e rotacionado a
+cada uso. O refresh token fica em cookie `HttpOnly`, `Secure` em produção, `SameSite=Strict` e
+restrito às rotas de autenticação; refresh e logout validam a origem permitida. Reuso do token
+anterior revoga sua família.
 
-**Rationale**: a V1 tem um backend monolítico e um navegador como consumidor principal. Sessões
-oferecem logout e revogação imediatos sem emissão, refresh e blacklist de JWT. Persistir no banco já
-existente evita perder sessões em todo reinício e mantém aberta a possibilidade de mais de uma
-instância sem introduzir cache distribuído.
+Clientes podem autenticar por e-mail/senha ou por Google OAuth 2.0 Authorization Code com OpenID
+Connect. A aplicação valida integralmente o retorno Google, usa o `sub` como identificador externo
+imutável, cria ou vincula seu próprio `Account` e então emite os tokens da aplicação. Tokens Google
+nunca autorizam diretamente a API. O handshake mantém `state`, nonce e a intenção cliente/admin em
+cookie curto assinado/cifrado. Novo cliente que ainda precisa informar telefone recebe apenas um
+registration token JWT de 10 minutos, restrito à conclusão do cadastro, antes do par definitivo.
 
-**Alternatives considered**: JWT com refresh token, bearer opaco próprio, HTTP Basic e sessão apenas
-em memória. JWT e token próprio exigiriam infraestrutura de credenciais já resolvida pelo Spring
-Session; Basic reenvia credenciais; memória perde todas as sessões em reinícios.
+**Rationale**: access tokens curtos limitam a janela de uma credencial vazada; refresh stateful e
+rotativo permite logout e revogação sem blacklist de todos os access tokens. O `sub` é estável mesmo
+quando o e-mail Google muda, enquanto o `Account` local mantém autorização e domínio independentes
+do provedor.
+
+**Alternatives considered**: sessão persistida, refresh JWT sem estado, access token longo e uso do ID
+token Google como bearer da API. Sessão foi substituída pela decisão do projeto; refresh sem estado
+não permite rotação/reuso confiáveis; token longo amplia risco; token Google acopla a autorização
+interna ao provedor.
 
 **Sources**:
 
-- [Spring Security session management](https://docs.spring.io/spring-security/reference/servlet/authentication/session-management.html)
-- [Spring Session JDBC](https://docs.spring.io/spring-session/reference/configuration/jdbc.html)
-- [Spring Security CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html)
+- [Spring Security OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html)
+- [Spring Security Resource Server JWT](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
+- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
 
 ## 4. Senhas e autorização
 
@@ -68,22 +79,24 @@ erros de mapeamento.
 
 ## 5. Provisionamento administrativo
 
-**Decision**: criar a única administradora por comando/perfil operacional explícito no mesmo
-artefato. Credenciais vêm de segredos do ambiente; não há endpoint, migration com senha ou usuário
-padrão. Uma restrição parcial única no PostgreSQL impede duas contas `ADMIN`.
+**Decision**: separar o início do login Google de cliente e de administradora, protegendo a intenção
+no `state`. A única administradora fica restrita ao `sub` Google autorizado e ao e-mail verificado da
+loja, ambos fornecidos por segredo operacional. O primeiro callback administrativo válido cria o
+`Account` `ADMIN` e a identidade externa em uma transação protegida pela constraint de uma única
+administradora. Não há senha administrativa nem endpoint de cadastro ou promoção.
 
-**Rationale**: separa bootstrap operacional do cadastro público, permite auditoria e protege também
-contra concorrência. A execução falha se já houver administradora e nunca redefine credenciais
-silenciosamente.
+**Rationale**: o privilégio depende da intenção administrativa explícita, do identificador imutável
+emitido pelo Google e de configuração explícita da loja, não de simples coincidência de e-mail. Isso
+permite o primeiro acesso sem seed de senha e impede que qualquer conta Google obtenha `ADMIN`.
 
-**Alternatives considered**: seed em migration, criação automática em todo startup e endpoint de
-cadastro administrativo. Todas mantêm segredo versionado, repetem efeitos ou aumentam a superfície
-de ataque.
+**Alternatives considered**: permitir uma lista de e-mails, promover cliente existente, seed com
+senha ou criar administrador em todo startup. E-mail isolado pode mudar ou colidir; promoção pública
+abre elevação de privilégio; senha/seed contradiz a autenticação Google administrativa definida.
 
 ## 6. Flyway e schema
 
 **Decision**: Flyway é a única autoridade para schema; Hibernate usa `ddl-auto=validate`. Migrations
-incluem tabelas de negócio, índices, constraints e o schema oficial do Spring Session.
+incluem tabelas de negócio, identidades externas, refresh tokens, índices e constraints.
 
 **Rationale**: ambientes reproduzíveis e mudanças auditáveis são exigidos pela Constitution. Usar
 PostgreSQL real nos testes cobre índices parciais, locks e tipos que H2 não reproduz.
@@ -126,10 +139,13 @@ sobrescrita e exclusão antecipada podem quebrar referências publicadas.
 
 **Decision**: exigir `Idempotency-Key` em cada confirmação. A combinação cliente/chave é única; a
 mesma chave com o mesmo produto retorna o resultado existente e com produto diferente retorna
-conflito. Um novo interesse intencional usa nova chave.
+conflito. A primeira confirmação persiste atomicamente `Interest`, `Reminder` e `ContactRecord`
+pendente; unicidades por `interest_id` impedem acompanhamento duplicado. Um novo interesse
+intencional usa nova chave.
 
 **Rationale**: protege contra duplo clique, retry e concorrência sem impedir que o cliente demonstre
-novo interesse no mesmo produto em outro momento.
+novo interesse no mesmo produto em outro momento, e garante que todo interesse confirmado tenha um
+único acompanhamento completo.
 
 **Alternatives considered**: unicidade eterna cliente/produto e deduplicação por janela de tempo. A
 primeira altera o requisito; a segunda é ambígua e sujeita a relógio.
@@ -138,31 +154,43 @@ primeira altera o requisito; a segunda é ambígua e sujeita a relógio.
 
 **Decision**: gerar no backend uma URL `wa.me` com número oficial em formato E.164 e mensagem mínima
 percent-encoded contendo nome e referência pública do produto. A URL é devolvida como dado, sem
-redirect HTTP nem chamada a uma API do WhatsApp.
+redirect HTTP, WhatsApp Business API ou envio automático. Antes da resposta, a transação de
+confirmação cria lembrete `CUSTOMER_REQUEST_FOLLOW_UP` e `ContactRecord` `PENDING`; o contato só vira
+histórico concluído quando a administradora registra o resultado, concluindo o lembrete associado na
+mesma transação.
 
 **Rationale**: mantém destino e conteúdo sob controle do backend, evita open redirect e não inclui
-dados pessoais. O registro do interesse independe de o dispositivo conseguir abrir o WhatsApp.
+dados pessoais. O registro e seu acompanhamento independem de o dispositivo conseguir abrir o
+WhatsApp, sem alegar que uma conversa ocorreu.
 
 **Alternatives considered**: URL montada no frontend, destino enviado pelo cliente e integração com
 API de mensagens. As duas primeiras perdem autoridade; a última adiciona automação fora da V1.
 
 ## 11. Contratos e erros
 
-**Decision**: documentar o contrato em OpenAPI 3.1, usar `/api/v1`, paginação limitada e erros RFC
-9457 `application/problem+json`. Uploads usam multipart, e respostas públicas nunca incluem
-identificador externo do Cloudinary, hash ou dados internos do CRM.
+**Decision**: documentar o contrato em OpenAPI 3.1, usar `/api/v1`, paginação limitada e um payload
+próprio `ApiErrorResponse` em `application/json`, preservando o padrão do Fidelizei. Catálogos de
+erros por contexto fornecem código globalmente único e mensagem segura; exceptions específicas
+carregam esses erros e o `GlobalExceptionHandler` os traduz para HTTP. Violações de validação,
+`AuthenticationEntryPoint` e `AccessDeniedHandler` usam o mesmo payload. O fallback 500 expõe apenas
+`INTERNAL_001` e uma mensagem genérica. Uploads usam multipart, e respostas públicas nunca incluem
+identificador externo do Cloudinary, hash, token ou dados internos do CRM.
 
-**Rationale**: um contrato único orienta frontend, testes e validação. Problem Details evita formatos
-de erro diferentes e permite sanitização consistente.
+**Rationale**: um contrato único orienta frontend, testes e validação, mantém a identidade já usada
+no projeto de referência e elimina formatos divergentes entre MVC, validação e Spring Security. A
+separação dos catálogos impede que exceptions de `application` dependam incorretamente de erros do
+`domain`; um teste de catálogo garante unicidade global dos códigos.
 
-**Alternatives considered**: contratos apenas em controllers ou documento narrativo. Ambos permitem
-drift e são menos verificáveis.
+**Alternatives considered**: formato RFC 9457, contratos apenas em controllers ou documento
+narrativo. O formato RFC foi descartado por decisão explícita; as demais alternativas permitem drift
+e são menos verificáveis.
 
 ## 12. Estratégia de testes
 
 **Decision**: regras puras e orquestração usam testes unitários com fakes; contratos, segurança,
-migrations e persistência usam Spring Boot Test, MockMvc e PostgreSQL Testcontainers. Cloudinary não
-é chamado pela suíte comum.
+migrations e persistência usam Spring Boot Test, MockMvc e PostgreSQL Testcontainers. Docker é
+necessário para os containers efêmeros da suíte de integração, não para executar a aplicação pela
+IDE. Cloudinary e Google não são chamados pela suíte comum.
 
 **Rationale**: os testes protegem comportamento e riscos reais, incluindo constraints e transações
 do PostgreSQL, sem ficarem instáveis por rede ou credenciais externas.

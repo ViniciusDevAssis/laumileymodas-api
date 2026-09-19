@@ -6,24 +6,17 @@ Este guia descreve a validação esperada após a implementação. O contrato de
 ## Prerequisites
 
 - Java 21
-- Docker com PostgreSQL disponível para desenvolvimento e testes
+- PostgreSQL acessível para executar a aplicação pela IDE
+- Docker disponível somente para os containers temporários dos testes de integração
 - Credenciais de um ambiente de desenvolvimento do Cloudinary
+- Cliente OAuth 2.0 Google de desenvolvimento e URI de callback registrada
+- Par de chaves de desenvolvimento para assinar e validar os JWT próprios
 - Número de WhatsApp da loja em formato E.164
 
 ## 1. Configure PostgreSQL
 
-Exemplo descartável para desenvolvimento:
-
-```powershell
-docker run --name laumiley-postgres `
-  -e POSTGRES_DB=laumiley `
-  -e POSTGRES_USER=laumiley `
-  -e POSTGRES_PASSWORD=local-only `
-  -p 5432:5432 `
-  -d postgres:17
-```
-
-Configure a aplicação sem versionar segredos:
+Crie uma base PostgreSQL local ou compartilhada pelo meio usual do ambiente e configure a aplicação
+sem versionar segredos. O backend continuará sendo executado diretamente pela IDE ou Maven:
 
 ```powershell
 $env:SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/laumiley'
@@ -34,22 +27,24 @@ $env:CLOUDINARY_API_KEY='<api-key>'
 $env:CLOUDINARY_API_SECRET='<api-secret>'
 $env:LAUMILEY_WHATSAPP_NUMBER='<numero-e164-sem-sinal>'
 $env:LAUMILEY_ALLOWED_ORIGINS='http://localhost:3000'
+$env:GOOGLE_CLIENT_ID='<google-client-id>'
+$env:GOOGLE_CLIENT_SECRET='<google-client-secret>'
+$env:LAUMILEY_JWT_PRIVATE_KEY='<chave-privada-de-desenvolvimento>'
+$env:LAUMILEY_JWT_PUBLIC_KEY='<chave-publica-de-desenvolvimento>'
+$env:LAUMILEY_ADMIN_GOOGLE_SUB='<sub-da-conta-google-da-loja>'
+$env:LAUMILEY_ADMIN_GOOGLE_EMAIL='admin@example.com'
 ```
 
 Resultado esperado: ao iniciar, Flyway aplica todas as migrations e Hibernate valida o schema sem
 criá-lo ou alterá-lo automaticamente.
 
-## 2. Provisione a única administradora
+## 2. Configure a única identidade administrativa
 
-```powershell
-$env:LAUMILEY_ADMIN_EMAIL='admin@example.com'
-$env:LAUMILEY_ADMIN_PASSWORD='<senha-inicial-forte>'
-.\mvnw.cmd -Dspring-boot.run.profiles=admin-bootstrap spring-boot:run
-```
-
-Resultado esperado: a primeira execução cria exatamente uma conta `ADMIN` e encerra. Uma segunda
-execução falha sem criar ou alterar conta. Depois do sucesso, remova as variáveis e não execute o
-perfil no funcionamento normal.
+Obtenha o `sub` da conta Google controlada pela loja e configure-o junto do e-mail verificado
+esperado. Não configure senha administrativa. No primeiro login Google válido dessa identidade, a
+aplicação cria o único `Account` `ADMIN`; qualquer outro `sub` no fluxo administrativo deve receber
+`403`, mesmo que informe um e-mail parecido. O segredo do cliente Google e as chaves JWT não devem
+ser versionados.
 
 ## 3. Execute verificações automatizadas
 
@@ -61,11 +56,15 @@ A suíte deve:
 
 - subir PostgreSQL real com Testcontainers e executar todo o histórico Flyway;
 - verificar catálogo público e matriz anônimo/`CLIENT`/`ADMIN`;
-- verificar CSRF, sessão, logout e negação padrão;
-- provar idempotência concorrente do interesse;
+- verificar login local/Google, JWT válido, expirado e adulterado, rotação, reuso, logout e negação padrão;
+- provar idempotência concorrente do interesse e do conjunto `Reminder`/`ContactRecord`;
 - preservar as invariantes de imagens em sucesso, rollback e falha externa;
-- validar consentimento, contatos e estados derivados dos lembretes;
-- executar sem acesso real ao Cloudinary.
+- validar consentimento, contatos pendentes/concluídos e conclusão conjunta do lembrete;
+- validar o mesmo `ApiErrorResponse` em domínio, validação, autenticação, autorização e fallback 500;
+- executar sem acesso real ao Cloudinary ou Google.
+
+O Docker é usado pela suíte apenas para o PostgreSQL efêmero do Testcontainers. O backend não
+precisa ser empacotado ou executado em container durante o desenvolvimento.
 
 ## 4. Inicie a aplicação
 
@@ -73,13 +72,11 @@ A suíte deve:
 .\mvnw.cmd spring-boot:run
 ```
 
-Use uma sessão HTTP para preservar os cookies. O exemplo abaixo obtém o token CSRF:
+Use um objeto `WebRequestSession` somente para preservar o cookie `HttpOnly` de refresh token:
 
 ```powershell
 $api='http://localhost:8080/api/v1'
 $session=New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$csrf=Invoke-RestMethod -Method Get -Uri "$api/auth/csrf" -WebSession $session
-$headers=@{'X-CSRF-TOKEN'=$csrf.token}
 ```
 
 ## 5. Valide catálogo anônimo
@@ -103,29 +100,36 @@ $registration=@{
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri "$api/auth/customers" `
-  -WebSession $session -Headers $headers -ContentType 'application/json' -Body $registration
+  -ContentType 'application/json' -Body $registration
 
 $login=@{email='cliente@example.com';password='<senha-de-teste>'} | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "$api/auth/login" `
-  -WebSession $session -Headers $headers -ContentType 'application/json' -Body $login
+$auth=Invoke-RestMethod -Method Post -Uri "$api/auth/login" `
+  -WebSession $session -ContentType 'application/json' -Body $login
+$headers=@{Authorization="Bearer $($auth.accessToken)"}
 ```
 
-Resultado esperado: cadastro `201`, login `200`, cookie de sessão criado e papel `CLIENT`. A
+Resultado esperado: cadastro `201`, login `200`, access token JWT retornado, refresh token apenas no
+cookie seguro e papel `CLIENT`. A
 autorização de contato proativo começa como `false` e o cliente não consegue acessar `/admin/**`.
+
+Valide também `POST /auth/refresh`: o access token é renovado e o refresh token é rotacionado.
+Reutilizar o valor anterior deve retornar `401` e revogar a família. Para Google, abra
+`/auth/google/client`, conclua o fluxo e confirme que a aplicação usa seu próprio `Account` e retorna o
+mesmo contrato de tokens. Um cliente novo completa nome e WhatsApp antes de receber tokens.
 
 ## 7. Valide consentimento
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri "$api/customers/me/proactive-contact-consent" `
-  -WebSession $session
+  -Headers $headers
 
 $grant=@{authorized=$true} | ConvertTo-Json
 Invoke-RestMethod -Method Put -Uri "$api/customers/me/proactive-contact-consent" `
-  -WebSession $session -Headers $headers -ContentType 'application/json' -Body $grant
+  -Headers $headers -ContentType 'application/json' -Body $grant
 
 $revoke=@{authorized=$false} | ConvertTo-Json
 Invoke-RestMethod -Method Put -Uri "$api/customers/me/proactive-contact-consent" `
-  -WebSession $session -Headers $headers -ContentType 'application/json' -Body $revoke
+  -Headers $headers -ContentType 'application/json' -Body $revoke
 ```
 
 Resultado esperado: concessão exige ação afirmativa, revogação vale imediatamente e nenhuma das duas
@@ -138,27 +142,32 @@ Escolha um `productId` ativo retornado pelo catálogo:
 ```powershell
 $key=[guid]::NewGuid().ToString()
 $interest=Invoke-RestMethod -Method Post -Uri "$api/products/<productId>/interests" `
-  -WebSession $session -Headers ($headers + @{'Idempotency-Key'=$key})
+  -Headers ($headers + @{'Idempotency-Key'=$key})
 
 $interest
 ```
 
 Resultado esperado: `201`, um único `interestId` e uma `whatsappUrl` cujo destino é o número oficial
 e cujo texto identifica somente o produto. Repetir a chamada com a mesma chave retorna o mesmo
-interesse; usar a chave para outro produto retorna `409`. Produto inativo não cria interesse.
+interesse; usar a chave para outro produto retorna `409`. Produto inativo não cria interesse. A
+primeira confirmação também cria exatamente um lembrete automático acionável e um `ContactRecord`
+`PENDING`; retries não criam novos acompanhamentos.
 
 ## 9. Valide administração do catálogo
 
-Encerre a sessão do cliente, autentique a administradora e mantenha o cookie/CSRF atualizados:
+Revogue o refresh token do cliente e autentique a administradora pelo Google autorizado:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "$api/auth/logout" -WebSession $session -Headers $headers
+Invoke-RestMethod -Method Post -Uri "$api/auth/logout" -WebSession $session
 ```
 
-Depois do login administrativo, valide pelo contrato:
+Use `/auth/google/admin` e o access token administrativo no header Bearer. Confirme antes que outra
+conta Google recebe `403` nesse fluxo e não cria nem promove `Account`; ela continua podendo usar o
+fluxo de cliente. Depois do login administrativo, valide pelo contrato:
 
 1. criar e renomear uma categoria;
 2. criar produto multipart com uma ou mais imagens e uma principal;
+   confirmar que listagem e detalhe retornam as URLs ordenadas de todas as imagens do produto;
 3. trocar a imagem principal;
 4. tentar remover a última imagem e receber `422`;
 5. inativar o produto e confirmar que ele some do catálogo e rejeita novo interesse;
@@ -170,10 +179,15 @@ Como `ADMIN`, execute os fluxos documentados em `/admin`:
 
 1. localizar o cliente por nome, e-mail ou telefone;
 2. consultar seus interesses;
-3. registrar contato com data, canal e descrição;
-4. criar lembrete `CUSTOMER_REQUEST_FOLLOW_UP` e concluí-lo;
-5. criar lembrete `PROACTIVE_CONTACT` com consentimento vigente;
-6. revogar o consentimento como cliente e confirmar que o lembrete proativo fica `actionable=false`,
+3. localizar o lembrete automático e seu `ContactRecord` `PENDING`, com canal WhatsApp, data,
+   cliente/código e produto corretos;
+4. confirmar que o contato pendente não aparece como conversa concluída;
+5. completar o `ContactRecord` com data e descrição e confirmar que o lembrete relacionado muda
+   para `COMPLETED` no mesmo commit;
+6. registrar separadamente um contato manual com data, canal e descrição;
+7. criar e concluir um lembrete manual `CUSTOMER_REQUEST_FOLLOW_UP`;
+8. criar lembrete `PROACTIVE_CONTACT` com consentimento vigente;
+9. revogar o consentimento como cliente e confirmar que o lembrete proativo fica `actionable=false`,
    sem apagar histórico nem bloquear o acompanhamento solicitado pelo cliente.
 
 Resultado esperado: apenas `ADMIN` acessa o CRM; lembrete vencido continua `PENDING`; conclusão não
@@ -181,12 +195,14 @@ remove o registro.
 
 ## 11. Valide caminhos negativos de segurança
 
-- Requisição mutável sem `X-CSRF-TOKEN` retorna `403`.
-- Sessão ausente ou expirada em recurso protegido retorna `401`.
+- Bearer ausente, JWT expirado ou assinatura/claims inválidos em recurso protegido retornam `401`.
+- Refresh token ausente, expirado, revogado ou reutilizado retorna `401` e não emite access token.
 - Cliente autenticado em `/admin/**` retorna `403`.
 - Login com e-mail inexistente e senha incorreta retorna o mesmo formato genérico.
-- Erros usam `application/problem+json` e não incluem stack trace, senha, hash, resposta do Cloudinary
-  ou dados de outro cliente.
+- Conta Google não autorizada nunca recebe papel `ADMIN`.
+- Erros usam `application/json` com `ApiErrorResponse` e não incluem stack trace, senha, token, hash,
+  resposta do Cloudinary ou dados de outro cliente. Validação, `AuthenticationEntryPoint` e
+  `AccessDeniedHandler` preservam esse mesmo formato; falhas inesperadas usam `INTERNAL_001`.
 
 ## Completion Gate
 

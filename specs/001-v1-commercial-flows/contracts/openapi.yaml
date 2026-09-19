@@ -2,7 +2,9 @@ openapi: 3.1.0
 info:
   title: Laumiley Modas API
   version: 1.0.0
-  description: Contrato REST da operação comercial V1.
+  description: >-
+    Contrato REST da operação comercial V1. Toda operação pode retornar HTTP 500 com
+    ApiErrorResponse, código INTERNAL_001 e mensagem genérica, sem detalhes internos.
 servers:
   - url: /api/v1
 tags:
@@ -13,26 +15,11 @@ tags:
   - name: Admin CRM
 
 paths:
-  /auth/csrf:
-    get:
-      tags: [Auth]
-      summary: Obtém o token CSRF para operações mutáveis
-      operationId: getCsrfToken
-      responses:
-        '200':
-          description: Token emitido e cookie associado configurado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CsrfToken'
-
   /auth/customers:
     post:
       tags: [Auth]
       summary: Cadastra uma conta de cliente
       operationId: registerCustomer
-      security:
-        - csrfToken: []
       requestBody:
         required: true
         content:
@@ -55,10 +42,8 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Autentica cliente ou administradora e cria sessão
+      summary: Autentica cliente por e-mail e senha
       operationId: login
-      security:
-        - csrfToken: []
       requestBody:
         required: true
         content:
@@ -67,25 +52,106 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Sessão criada em cookie seguro
+          description: Access token emitido e refresh token configurado em cookie seguro
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CurrentAccount'
+                $ref: '#/components/schemas/AuthTokenResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /auth/google/client:
+    get:
+      tags: [Auth]
+      summary: Inicia cadastro ou login Google de cliente
+      operationId: beginGoogleClientLogin
+      responses:
+        '302':
+          description: Redirecionamento para o Google com state e nonce protegidos
+
+  /auth/google/admin:
+    get:
+      tags: [Auth]
+      summary: Inicia login Google da única conta administrativa autorizada
+      operationId: beginGoogleAdminLogin
+      responses:
+        '302':
+          description: Redirecionamento para o Google com intenção administrativa protegida no state
+
+  /auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Conclui o fluxo Google iniciado para cliente ou administradora
+      operationId: completeGoogleLogin
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Account local autenticado; refresh token configurado em cookie seguro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokenResponse' }
+        '202':
+          description: Novo cliente Google deve completar os dados obrigatórios antes de receber tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GoogleRegistrationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/google/customers:
+    post:
+      tags: [Auth]
+      summary: Completa o cadastro de um novo cliente autenticado pelo Google
+      operationId: completeGoogleCustomerRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoogleCustomerRegistrationRequest' }
+      responses:
+        '201':
+          description: Account e Customer criados; refresh token configurado em cookie seguro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotaciona o refresh token e emite novo access token
+      operationId: refreshAccessToken
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: Novo par emitido; o refresh token anterior não pode ser reutilizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokenResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /auth/logout:
     post:
       tags: [Auth]
-      summary: Encerra a sessão atual
+      summary: Revoga a família do refresh token atual
       operationId: logout
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - refreshCookie: []
       responses:
-        '204': { description: Sessão invalidada }
+        '204': { description: Refresh tokens revogados e cookie removido }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/me:
@@ -94,7 +160,7 @@ paths:
       summary: Retorna a conta autenticada
       operationId: getCurrentAccount
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       responses:
         '200':
           description: Conta atual
@@ -142,7 +208,7 @@ paths:
       summary: Consulta a autorização atual para contatos proativos
       operationId: getMyContactConsent
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       responses:
         '200':
           description: Estado atual
@@ -157,8 +223,7 @@ paths:
       summary: Concede ou retira autorização para contatos proativos
       operationId: setMyContactConsent
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -185,8 +250,7 @@ paths:
       summary: Registra interesse e gera o contexto do WhatsApp
       operationId: registerProductInterest
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -214,7 +278,7 @@ paths:
       summary: Recupera o link do WhatsApp de um interesse próprio
       operationId: getInterestWhatsappLink
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/InterestId'
       responses:
@@ -234,7 +298,7 @@ paths:
       summary: Lista categorias administrativas
       operationId: listAdminCategories
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       responses:
         '200':
           description: Categorias
@@ -250,8 +314,7 @@ paths:
       summary: Cadastra uma categoria
       operationId: createCategory
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -274,8 +337,7 @@ paths:
       summary: Renomeia uma categoria
       operationId: renameCategory
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CategoryId'
       requestBody:
@@ -301,7 +363,7 @@ paths:
       summary: Lista produtos ativos e inativos
       operationId: listAdminProducts
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -318,8 +380,7 @@ paths:
       summary: Cria produto completo com imagens
       operationId: createProduct
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -356,7 +417,7 @@ paths:
       summary: Consulta um produto para administração
       operationId: getAdminProduct
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
@@ -373,8 +434,7 @@ paths:
       summary: Altera dados descritivos e categoria do produto
       operationId: updateProduct
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
       requestBody:
@@ -400,8 +460,7 @@ paths:
       summary: Ativa ou inativa um produto
       operationId: setProductStatus
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
       requestBody:
@@ -430,8 +489,7 @@ paths:
       summary: Adiciona imagens a um produto
       operationId: addProductImages
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
       requestBody:
@@ -470,8 +528,7 @@ paths:
       summary: Define a imagem principal do produto
       operationId: setPrimaryProductImage
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
         - $ref: '#/components/parameters/ImageId'
@@ -491,8 +548,7 @@ paths:
       summary: Remove uma imagem sem quebrar as invariantes do produto
       operationId: removeProductImage
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ProductId'
         - $ref: '#/components/parameters/ImageId'
@@ -514,7 +570,7 @@ paths:
       summary: Pesquisa clientes por nome, e-mail ou telefone
       operationId: searchCustomers
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - name: query
           in: query
@@ -537,7 +593,7 @@ paths:
       summary: Consulta o contexto comercial de um cliente
       operationId: getCustomerContext
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       responses:
@@ -556,7 +612,7 @@ paths:
       summary: Lista interesses do cliente
       operationId: listCustomerInterests
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
         - $ref: '#/components/parameters/Page'
@@ -574,17 +630,17 @@ paths:
   /admin/customers/{customerId}/contacts:
     get:
       tags: [Admin CRM]
-      summary: Lista o histórico manual de contatos
+      summary: Lista registros de contato pendentes e concluídos
       operationId: listCustomerContacts
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
         '200':
-          description: Contatos mais recentes primeiro
+          description: Registros distinguem status pendente e concluído
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ContactPage' }
@@ -596,8 +652,7 @@ paths:
       summary: Registra um contato já realizado
       operationId: recordContact
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       requestBody:
@@ -616,13 +671,39 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/contacts/{contactId}/complete:
+    post:
+      tags: [Admin CRM]
+      summary: Completa um contato pendente e conclui seu lembrete automático
+      operationId: completePendingContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ContactId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactCompletionInput' }
+      responses:
+        '200':
+          description: Contato e lembrete concluídos atomicamente; repetição é idempotente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactCompletionResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /admin/customers/{customerId}/reminders:
     get:
       tags: [Admin CRM]
       summary: Lista lembretes de um cliente
       operationId: listCustomerReminders
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
         - $ref: '#/components/parameters/Page'
@@ -641,8 +722,7 @@ paths:
       summary: Cria um lembrete manual
       operationId: createReminder
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       requestBody:
@@ -667,7 +747,7 @@ paths:
       summary: Lista lembretes pendentes para acompanhamento
       operationId: listPendingReminders
       security:
-        - sessionCookie: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -683,11 +763,10 @@ paths:
   /admin/reminders/{reminderId}/complete:
     post:
       tags: [Admin CRM]
-      summary: Conclui um lembrete
-      operationId: completeReminder
+      summary: Conclui um lembrete criado manualmente
+      operationId: completeManualReminder
       security:
-        - sessionCookie: []
-          csrfToken: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ReminderId'
       responses:
@@ -699,17 +778,18 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
 components:
   securitySchemes:
-    sessionCookie:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
       type: apiKey
       in: cookie
-      name: SESSION
-    csrfToken:
-      type: apiKey
-      in: header
-      name: X-CSRF-TOKEN
+      name: LAUMILEY_REFRESH
 
   parameters:
     Page:
@@ -750,6 +830,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -760,61 +845,60 @@ components:
     BadRequest:
       description: Entrada inválida
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     Unauthorized:
       description: Autenticação ausente ou inválida
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     Forbidden:
       description: Papel sem permissão para a operação
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     NotFound:
       description: Recurso inexistente ou não visível ao solicitante
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     Conflict:
       description: Duplicidade, idempotência reutilizada ou conflito de estado
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     UnprocessableEntity:
       description: Regra de domínio impede a operação
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     PayloadTooLarge:
       description: Arquivo maior que o limite configurado
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     UnsupportedMediaType:
       description: Tipo de arquivo não permitido
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     ExternalUnavailable:
       description: Armazenamento de mídia indisponível sem alteração parcial publicada
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
     TooManyRequests:
       description: Limite temporário de tentativas atingido
       content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
+    InternalServerError:
+      description: Falha inesperada sem exposição de detalhes internos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
 
   schemas:
-    CsrfToken:
-      type: object
-      required: [headerName, token]
-      properties:
-        headerName: { type: string, example: X-CSRF-TOKEN }
-        token: { type: string }
     RegisterCustomerRequest:
       type: object
       additionalProperties: false
@@ -842,6 +926,36 @@ components:
           maxLength: 64
           writeOnly: true
           description: Máximo adicional de 72 bytes após codificação UTF-8.
+    AuthTokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, account]
+      properties:
+        accessToken:
+          type: string
+          description: JWT próprio da aplicação; o refresh JWT é enviado somente em cookie HttpOnly.
+        tokenType: { type: string, const: Bearer }
+        expiresIn: { type: integer, description: Segundos restantes do access token. }
+        account: { $ref: '#/components/schemas/CurrentAccount' }
+    GoogleRegistrationRequired:
+      type: object
+      required: [registrationToken, email, expiresIn]
+      properties:
+        registrationToken:
+          type: string
+          description: Credencial curta que permite apenas completar o cadastro CLIENT.
+        email: { type: string, format: email }
+        givenName: { type: [string, 'null'] }
+        familyName: { type: [string, 'null'] }
+        expiresIn: { type: integer, description: Segundos restantes para completar o cadastro. }
+    GoogleCustomerRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [registrationToken, firstName, lastName, whatsappPhone]
+      properties:
+        registrationToken: { type: string, writeOnly: true }
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        whatsappPhone: { type: string, maxLength: 20, description: Número normalizável para E.164. }
     CurrentAccount:
       type: object
       required: [id, email, role]
@@ -873,6 +987,7 @@ components:
       enum: [ACTIVE, INACTIVE]
     ProductImage:
       type: object
+      description: Referência pública da imagem; o externalId do provedor permanece interno.
       required: [id, url, primary, displayOrder]
       properties:
         id: { type: string, format: uuid }
@@ -881,23 +996,20 @@ components:
         displayOrder: { type: integer, minimum: 0 }
     ProductSummary:
       type: object
-      required: [id, name, description, category, mainImage]
+      required: [id, name, description, category, mainImage, images]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
         category: { $ref: '#/components/schemas/Category' }
         mainImage: { $ref: '#/components/schemas/ProductImage' }
+        images:
+          type: array
+          minItems: 1
+          description: URLs de todas as imagens do produto em ordem de exibição.
+          items: { $ref: '#/components/schemas/ProductImage' }
     ProductDetail:
-      allOf:
-        - $ref: '#/components/schemas/ProductSummary'
-        - type: object
-          required: [images]
-          properties:
-            images:
-              type: array
-              minItems: 1
-              items: { $ref: '#/components/schemas/ProductImage' }
+      $ref: '#/components/schemas/ProductSummary'
     ProductCreateInput:
       type: object
       additionalProperties: false
@@ -958,6 +1070,18 @@ components:
         - type: object
           properties:
             contactConsentChangedAt: { type: [string, 'null'], format: date-time }
+    CustomerReference:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: { type: string, format: uuid, description: Código único do cliente. }
+        displayName: { type: string }
+    ProductReference:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
     ContactInput:
       type: object
       additionalProperties: false
@@ -966,15 +1090,31 @@ components:
         occurredAt: { type: string, format: date-time }
         channel: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, minLength: 1, maxLength: 2000 }
+    ContactCompletionInput:
+      type: object
+      additionalProperties: false
+      required: [occurredAt, description]
+      properties:
+        occurredAt: { type: string, format: date-time }
+        description: { type: string, minLength: 1, maxLength: 2000 }
     Contact:
-      allOf:
-        - $ref: '#/components/schemas/ContactInput'
-        - type: object
-          required: [id, customerId, createdAt]
-          properties:
-            id: { type: string, format: uuid }
-            customerId: { type: string, format: uuid }
-            createdAt: { type: string, format: date-time }
+      type: object
+      required: [id, customerId, status, channel, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        interestId: { type: [string, 'null'], format: uuid }
+        reminderId: { type: [string, 'null'], format: uuid }
+        product:
+          anyOf:
+            - $ref: '#/components/schemas/ProductReference'
+            - type: 'null'
+        status: { type: string, enum: [PENDING, COMPLETED] }
+        occurredAt: { type: [string, 'null'], format: date-time }
+        channel: { type: string }
+        description: { type: [string, 'null'] }
+        completedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
     ReminderInput:
       type: object
       additionalProperties: false
@@ -987,15 +1127,30 @@ components:
       allOf:
         - $ref: '#/components/schemas/ReminderInput'
         - type: object
-          required: [id, customerId, status, overdue, actionable, createdAt]
+          required: [id, customerId, customer, origin, status, overdue, actionable, createdAt]
           properties:
             id: { type: string, format: uuid }
             customerId: { type: string, format: uuid }
+            customer: { $ref: '#/components/schemas/CustomerReference' }
+            origin: { type: string, enum: [MANUAL, INTEREST] }
+            interestId: { type: [string, 'null'], format: uuid }
+            contactRecordId: { type: [string, 'null'], format: uuid }
+            product:
+              anyOf:
+                - $ref: '#/components/schemas/ProductReference'
+                - type: 'null'
+            channel: { type: [string, 'null'], description: WhatsApp no acompanhamento automático. }
             status: { type: string, enum: [PENDING, COMPLETED] }
             overdue: { type: boolean, readOnly: true }
             actionable: { type: boolean, readOnly: true }
             completedAt: { type: [string, 'null'], format: date-time }
             createdAt: { type: string, format: date-time }
+    ContactCompletionResult:
+      type: object
+      required: [contact, reminder]
+      properties:
+        contact: { $ref: '#/components/schemas/Contact' }
+        reminder: { $ref: '#/components/schemas/Reminder' }
     PageMetadata:
       type: object
       required: [page, size, totalElements, totalPages]
@@ -1046,23 +1201,23 @@ components:
           required: [items]
           properties:
             items: { type: array, items: { $ref: '#/components/schemas/Reminder' } }
-    Violation:
+    ValidationError:
       type: object
-      required: [field, message]
+      required: [field, code, message]
       properties:
         field: { type: string }
+        code: { type: string, example: VALIDATION_001 }
         message: { type: string }
-    Problem:
+    ApiErrorResponse:
       type: object
-      required: [type, title, status, code]
+      required: [timestamp, status, code, message, path]
       properties:
-        type: { type: string, format: uri-reference }
-        title: { type: string }
+        timestamp: { type: string, format: date-time }
         status: { type: integer }
-        detail: { type: string }
-        instance: { type: string, format: uri-reference }
-        code: { type: string }
-        traceId: { type: string }
-        violations:
+        code: { type: string, example: CATALOG_001 }
+        message: { type: string }
+        path: { type: string }
+        traceId: { type: [string, 'null'] }
+        errors:
           type: array
-          items: { $ref: '#/components/schemas/Violation' }
+          items: { $ref: '#/components/schemas/ValidationError' }
