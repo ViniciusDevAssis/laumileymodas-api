@@ -98,7 +98,8 @@ erros de mapeamento.
 
 **Decision**: separar o início do login Google de cliente e de administradora, protegendo a intenção
 no `state`. A única administradora fica restrita ao `sub` Google autorizado e ao e-mail verificado da
-loja, ambos fornecidos por configuração externa segura e nunca pelo frontend. O primeiro callback administrativo válido cria o
+loja, ambos fornecidos por configuração externa segura e nunca pelo frontend. O primeiro callback administrativo válido
+cria o
 `Account` `ADMIN` e a identidade externa em uma transação protegida pela constraint de uma única
 administradora. Não há senha administrativa nem endpoint de cadastro ou promoção.
 
@@ -186,17 +187,15 @@ API de mensagens. As duas primeiras perdem autoridade; a última adiciona automa
 ## 11. Contratos e erros
 
 **Decision**: documentar o contrato em OpenAPI 3.1, usar `/api/v1`, paginação limitada e um payload
-próprio `ApiErrorResponse` em `application/json`, preservando o padrão do Fidelizei. Catálogos de
+próprio `ApiErrorResponse` em `application/json`. Catálogos de
 erros por contexto fornecem código globalmente único e mensagem segura; exceptions específicas
 carregam esses erros e o `GlobalExceptionHandler` os traduz para HTTP. Violações de validação,
 `AuthenticationEntryPoint` e `AccessDeniedHandler` usam o mesmo payload. O fallback 500 expõe apenas
 `INTERNAL_001` e uma mensagem genérica. Uploads usam multipart, e respostas públicas nunca incluem
 identificador externo do Cloudinary, hash, token ou dados internos do CRM.
 
-**Rationale**: um contrato único orienta frontend, testes e validação, mantém a identidade já usada
-no projeto de referência e elimina formatos divergentes entre MVC, validação e Spring Security. A
-separação dos catálogos impede que exceptions de `application` dependam incorretamente de erros do
-`domain`; um teste de catálogo garante unicidade global dos códigos.
+**Rationale**: um contrato único orienta frontend, testes e validação e elimina formatos divergentes entre MVC,
+validação e Spring Security.
 
 **Alternatives considered**: formato RFC 9457, contratos apenas em controllers ou documento
 narrativo. O formato RFC foi descartado por decisão explícita; as demais alternativas permitem drift

@@ -344,8 +344,7 @@ UTF-8, Bearer JWT, multipart para mídia, datas ISO-8601, IDs opacos, paginaçã
 confirmação do interesse; sua repetição pelo mesmo cliente e produto devolve o resultado existente,
 e reutilização para outro produto retorna conflito.
 
-O padrão de exceções preservará a identidade adotada no Fidelizei: catálogos de erros por contexto e
-pela camada que é dona da falha,
+O padrão de exceções será composto por catálogos de erros por contexto e pela camada que é dona da falha,
 cada item com código estável e mensagem segura; exceptions específicas carregando um erro;
 `GlobalExceptionHandler` como tradutor central; e um único payload `ApiErrorResponse` com
 `timestamp`, `status`, `code`, `message`, `path`, `traceId` opcional e `errors` para violações de
