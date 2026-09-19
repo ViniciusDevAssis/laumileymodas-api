@@ -23,7 +23,7 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 
 	@Test
 	fun `aplica as migrations e inicializa o Hibernate com o schema validado`() {
-		assertThat(flyway.info().current()?.version?.version).isEqualTo("2")
+		assertThat(flyway.info().current()?.version?.version).isEqualTo("4")
 		assertThat(entityManagerFactory.isOpen).isTrue()
 
 		val tables = jdbcTemplate.queryForList(
@@ -40,6 +40,7 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 			    'category',
 			    'product',
 			    'product_image'
+			    ,'interest', 'reminder', 'contact_record'
 			  )
 			""".trimIndent(),
 			String::class.java,
@@ -54,6 +55,9 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 			"category",
 			"product",
 			"product_image",
+			"interest",
+			"reminder",
+			"contact_record",
 		)
 	}
 }

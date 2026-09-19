@@ -26,9 +26,7 @@ class PublicCatalogControllerIntegrationTest : PostgresIntegrationTest() {
 
 	@BeforeEach
 	fun cleanCatalog() {
-		jdbcTemplate.update("DELETE FROM product_image")
-		jdbcTemplate.update("DELETE FROM product")
-		jdbcTemplate.update("DELETE FROM category")
+		jdbcTemplate.execute("TRUNCATE TABLE contact_record, reminder, interest, product_image, product, category CASCADE")
 	}
 
 	@Test
