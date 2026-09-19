@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:17-alpine:///laumiley_test
+    username: test
+    password: test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-google-client
+            client-secret: test-google-secret
+
+laumiley:
+  frontend:
+    allowed-origins: http://localhost:3000
+    auth-success-url: http://localhost:3000/auth/google/success
+    registration-url: http://localhost:3000/auth/google/complete-registration
+    auth-error-url: http://localhost:3000/auth/google/error
+  security:
+    admin:
+      google-sub: test-admin-sub
+      google-email: admin@example.test
+    jwt:
+      private-key: test-private-key
+      public-key: test-public-key
+    oauth-handoff:
+      encryption-key: test-oauth-handoff-key
+  cloudinary:
+    cloud-name: test-cloud
+    api-key: test-key
+    api-secret: test-secret
+  whatsapp:
+    number: "5511999999999"

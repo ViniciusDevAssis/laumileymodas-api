@@ -1,5 +1,16 @@
 HELP.md
 target/
+out/
+.gradle/
+*.class
+*.jar
+*.log
+.env
+.env.*
+*.tmp
+*.swp
+Thumbs.db
+.DS_Store
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

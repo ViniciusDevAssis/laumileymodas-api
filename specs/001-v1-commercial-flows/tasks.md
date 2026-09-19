@@ -27,9 +27,9 @@ A decisão posterior de permitir cadastro pelo Google tornava ambígua a exigên
 
 **Purpose**: Preparar dependências e configuração do monólito Kotlin/Spring Boot.
 
-- [ ] T001 Atualizar `pom.xml` com Spring Validation, Spring Security, OAuth2 Client, OAuth2 Resource Server/JOSE, Spring Data JPA, Flyway, PostgreSQL, Cloudinary, Spring Security Test e Testcontainers PostgreSQL
-- [ ] T002 [P] Configurar datasource, Flyway, `ddl-auto=validate`, origens/URLs fixas do frontend, cookies/CSRF, JWT, Google OAuth2, Cloudinary, WhatsApp e limites de upload em `src/main/resources/application.yaml`
-- [ ] T003 [P] Criar configuração de testes sem segredos externos em `src/test/resources/application-test.yaml`
+- [X] T001 Atualizar `pom.xml` com Spring Validation, Spring Security, OAuth2 Client, OAuth2 Resource Server/JOSE, Spring Data JPA, Flyway, PostgreSQL, Cloudinary, Spring Security Test e Testcontainers PostgreSQL
+- [X] T002 [P] Configurar datasource, Flyway, `ddl-auto=validate`, origens/URLs fixas do frontend, cookies/CSRF, JWT, Google OAuth2, Cloudinary, WhatsApp e limites de upload em `src/main/resources/application.yaml`
+- [X] T003 [P] Criar configuração de testes sem segredos externos em `src/test/resources/application-test.yaml`
 
 ---
 
