@@ -1,0 +1,1068 @@
+openapi: 3.1.0
+info:
+  title: Laumiley Modas API
+  version: 1.0.0
+  description: Contrato REST da operação comercial V1.
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Catalog
+  - name: Customer
+  - name: Admin Catalog
+  - name: Admin CRM
+
+paths:
+  /auth/csrf:
+    get:
+      tags: [Auth]
+      summary: Obtém o token CSRF para operações mutáveis
+      operationId: getCsrfToken
+      responses:
+        '200':
+          description: Token emitido e cookie associado configurado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsrfToken'
+
+  /auth/customers:
+    post:
+      tags: [Auth]
+      summary: Cadastra uma conta de cliente
+      operationId: registerCustomer
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterCustomerRequest'
+      responses:
+        '201':
+          description: Cliente cadastrado; consentimento proativo inicia negado
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAccount'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autentica cliente ou administradora e cria sessão
+      operationId: login
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sessão criada em cookie seguro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAccount'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Encerra a sessão atual
+      operationId: logout
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        '204': { description: Sessão invalidada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Retorna a conta autenticada
+      operationId: getCurrentAccount
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Conta atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAccount'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /catalog/products:
+    get:
+      tags: [Catalog]
+      summary: Lista produtos ativos do catálogo público
+      operationId: listCatalogProducts
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Página de produtos; items pode ser vazio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+
+  /catalog/products/{productId}:
+    get:
+      tags: [Catalog]
+      summary: Consulta os detalhes de um produto ativo
+      operationId: getCatalogProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Produto ativo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /customers/me/proactive-contact-consent:
+    get:
+      tags: [Customer]
+      summary: Consulta a autorização atual para contatos proativos
+      operationId: getMyContactConsent
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Estado atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactConsent'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Customer]
+      summary: Concede ou retira autorização para contatos proativos
+      operationId: setMyContactConsent
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authorized]
+              properties:
+                authorized: { type: boolean }
+      responses:
+        '200':
+          description: Estado atualizado; a operação é idempotente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactConsent'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /products/{productId}/interests:
+    post:
+      tags: [Customer]
+      summary: Registra interesse e gera o contexto do WhatsApp
+      operationId: registerProductInterest
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Interesse criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterestResult'
+        '200':
+          description: Repetição idempotente; resultado existente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterestResult'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /customers/me/interests/{interestId}/whatsapp-link:
+    get:
+      tags: [Customer]
+      summary: Recupera o link do WhatsApp de um interesse próprio
+      operationId: getInterestWhatsappLink
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/InterestId'
+      responses:
+        '200':
+          description: Contexto recuperado sem criar outro interesse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappLink'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/categories:
+    get:
+      tags: [Admin Catalog]
+      summary: Lista categorias administrativas
+      operationId: listAdminCategories
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Categorias
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin Catalog]
+      summary: Cadastra uma categoria
+      operationId: createCategory
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '201':
+          description: Categoria criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/categories/{categoryId}:
+    patch:
+      tags: [Admin Catalog]
+      summary: Renomeia uma categoria
+      operationId: renameCategory
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '200':
+          description: Categoria atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/products:
+    get:
+      tags: [Admin Catalog]
+      summary: Lista produtos ativos e inativos
+      operationId: listAdminProducts
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Página administrativa de produtos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin Catalog]
+      summary: Cria produto completo com imagens
+      operationId: createProduct
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [product, images]
+              properties:
+                product: { $ref: '#/components/schemas/ProductCreateInput' }
+                images:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: binary }
+            encoding:
+              product: { contentType: application/json }
+      responses:
+        '201':
+          description: Produto e referências de imagem criados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ExternalUnavailable' }
+
+  /admin/products/{productId}:
+    get:
+      tags: [Admin Catalog]
+      summary: Consulta um produto para administração
+      operationId: getAdminProduct
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Produto ativo ou inativo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin Catalog]
+      summary: Altera dados descritivos e categoria do produto
+      operationId: updateProduct
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdateInput' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/products/{productId}/status:
+    put:
+      tags: [Admin Catalog]
+      summary: Ativa ou inativa um produto
+      operationId: setProductStatus
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/ProductStatus' }
+      responses:
+        '200':
+          description: Status atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /admin/products/{productId}/images:
+    post:
+      tags: [Admin Catalog]
+      summary: Adiciona imagens a um produto
+      operationId: addProductImages
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [images]
+              properties:
+                primaryImageIndex:
+                  type: integer
+                  minimum: 0
+                  description: Opcional; torna a imagem adicionada nessa posição a principal.
+                images:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: binary }
+      responses:
+        '200':
+          description: Imagens adicionadas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '503': { $ref: '#/components/responses/ExternalUnavailable' }
+
+  /admin/products/{productId}/images/{imageId}/primary:
+    put:
+      tags: [Admin Catalog]
+      summary: Define a imagem principal do produto
+      operationId: setPrimaryProductImage
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/ImageId'
+      responses:
+        '200':
+          description: Imagem principal definida; operação idempotente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/products/{productId}/images/{imageId}:
+    delete:
+      tags: [Admin Catalog]
+      summary: Remove uma imagem sem quebrar as invariantes do produto
+      operationId: removeProductImage
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/ImageId'
+        - name: replacementPrimaryImageId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obrigatório quando a imagem removida é a principal.
+      responses:
+        '204': { description: Referência removida e limpeza externa iniciada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /admin/customers:
+    get:
+      tags: [Admin CRM]
+      summary: Pesquisa clientes por nome, e-mail ou telefone
+      operationId: searchCustomers
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema: { type: string, maxLength: 160 }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Página de clientes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/customers/{customerId}:
+    get:
+      tags: [Admin CRM]
+      summary: Consulta o contexto comercial de um cliente
+      operationId: getCustomerContext
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Contexto do cliente e consentimento vigente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerContext' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/customers/{customerId}/interests:
+    get:
+      tags: [Admin CRM]
+      summary: Lista interesses do cliente
+      operationId: listCustomerInterests
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Interesses mais recentes primeiro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InterestPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/customers/{customerId}/contacts:
+    get:
+      tags: [Admin CRM]
+      summary: Lista o histórico manual de contatos
+      operationId: listCustomerContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Contatos mais recentes primeiro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin CRM]
+      summary: Registra um contato já realizado
+      operationId: recordContact
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactInput' }
+      responses:
+        '201':
+          description: Contato registrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/customers/{customerId}/reminders:
+    get:
+      tags: [Admin CRM]
+      summary: Lista lembretes de um cliente
+      operationId: listCustomerReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Lembretes do cliente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReminderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin CRM]
+      summary: Cria um lembrete manual
+      operationId: createReminder
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReminderInput' }
+      responses:
+        '201':
+          description: Lembrete criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reminder' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/reminders:
+    get:
+      tags: [Admin CRM]
+      summary: Lista lembretes pendentes para acompanhamento
+      operationId: listPendingReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Pendentes ordenados pela data prevista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReminderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/reminders/{reminderId}/complete:
+    post:
+      tags: [Admin CRM]
+      summary: Conclui um lembrete
+      operationId: completeReminder
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+      responses:
+        '200':
+          description: Lembrete concluído; repetição é idempotente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reminder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: SESSION
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-TOKEN
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ImageId:
+      name: imageId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InterestId:
+      name: interestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReminderId:
+      name: reminderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+
+  responses:
+    BadRequest:
+      description: Entrada inválida
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Autenticação ausente ou inválida
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Papel sem permissão para a operação
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Recurso inexistente ou não visível ao solicitante
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Duplicidade, idempotência reutilizada ou conflito de estado
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnprocessableEntity:
+      description: Regra de domínio impede a operação
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: Arquivo maior que o limite configurado
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnsupportedMediaType:
+      description: Tipo de arquivo não permitido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ExternalUnavailable:
+      description: Armazenamento de mídia indisponível sem alteração parcial publicada
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Limite temporário de tentativas atingido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    CsrfToken:
+      type: object
+      required: [headerName, token]
+      properties:
+        headerName: { type: string, example: X-CSRF-TOKEN }
+        token: { type: string }
+    RegisterCustomerRequest:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, email, password, whatsappPhone]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 320 }
+        password:
+          type: string
+          minLength: 8
+          maxLength: 64
+          writeOnly: true
+          description: Máximo adicional de 72 bytes após codificação UTF-8.
+        whatsappPhone: { type: string, maxLength: 20, description: Número normalizável para E.164. }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password:
+          type: string
+          minLength: 1
+          maxLength: 64
+          writeOnly: true
+          description: Máximo adicional de 72 bytes após codificação UTF-8.
+    CurrentAccount:
+      type: object
+      required: [id, email, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [CLIENT, ADMIN] }
+        customerId: { type: [string, 'null'], format: uuid }
+    ContactConsent:
+      type: object
+      required: [authorized]
+      properties:
+        authorized: { type: boolean }
+        changedAt: { type: [string, 'null'], format: date-time }
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    CategoryInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+    ProductStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    ProductImage:
+      type: object
+      required: [id, url, primary, displayOrder]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        primary: { type: boolean }
+        displayOrder: { type: integer, minimum: 0 }
+    ProductSummary:
+      type: object
+      required: [id, name, description, category, mainImage]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        mainImage: { $ref: '#/components/schemas/ProductImage' }
+    ProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          required: [images]
+          properties:
+            images:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/ProductImage' }
+    ProductCreateInput:
+      type: object
+      additionalProperties: false
+      required: [name, description, categoryId, status, primaryImageIndex]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        categoryId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ProductStatus' }
+        primaryImageIndex: { type: integer, minimum: 0 }
+    ProductUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        categoryId: { type: string, format: uuid }
+    AdminProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProductDetail'
+        - type: object
+          required: [status]
+          properties:
+            status: { $ref: '#/components/schemas/ProductStatus' }
+    InterestResult:
+      type: object
+      required: [interestId, product, createdAt, whatsappUrl]
+      properties:
+        interestId: { type: string, format: uuid }
+        product:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        createdAt: { type: string, format: date-time }
+        whatsappUrl: { type: string, format: uri }
+    WhatsappLink:
+      type: object
+      required: [interestId, whatsappUrl]
+      properties:
+        interestId: { type: string, format: uuid }
+        whatsappUrl: { type: string, format: uri }
+    CustomerSummary:
+      type: object
+      required: [id, firstName, lastName, email, whatsappPhone, proactiveContactAuthorized]
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        whatsappPhone: { type: string }
+        proactiveContactAuthorized: { type: boolean }
+    CustomerContext:
+      allOf:
+        - $ref: '#/components/schemas/CustomerSummary'
+        - type: object
+          properties:
+            contactConsentChangedAt: { type: [string, 'null'], format: date-time }
+    ContactInput:
+      type: object
+      additionalProperties: false
+      required: [occurredAt, channel, description]
+      properties:
+        occurredAt: { type: string, format: date-time }
+        channel: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 2000 }
+    Contact:
+      allOf:
+        - $ref: '#/components/schemas/ContactInput'
+        - type: object
+          required: [id, customerId, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            customerId: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+    ReminderInput:
+      type: object
+      additionalProperties: false
+      required: [description, dueAt, purpose]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 1000 }
+        dueAt: { type: string, format: date-time }
+        purpose: { type: string, enum: [PROACTIVE_CONTACT, CUSTOMER_REQUEST_FOLLOW_UP] }
+    Reminder:
+      allOf:
+        - $ref: '#/components/schemas/ReminderInput'
+        - type: object
+          required: [id, customerId, status, overdue, actionable, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            customerId: { type: string, format: uuid }
+            status: { type: string, enum: [PENDING, COMPLETED] }
+            overdue: { type: boolean, readOnly: true }
+            actionable: { type: boolean, readOnly: true }
+            completedAt: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+    PageMetadata:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1 }
+        totalElements: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+    ProductPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/ProductSummary' } }
+    AdminProductPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/AdminProductDetail' } }
+    CustomerPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/CustomerSummary' } }
+    InterestPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/InterestResult' } }
+    ContactPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Contact' } }
+    ReminderPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Reminder' } }
+    Violation:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code: { type: string }
+        traceId: { type: string }
+        violations:
+          type: array
+          items: { $ref: '#/components/schemas/Violation' }
