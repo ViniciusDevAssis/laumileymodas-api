@@ -13,6 +13,9 @@ administração do catálogo e CRM inicial para a Laumiley Modas.
 - Q: O que o sistema deve registrar para acompanhamento após encaminhar um interesse ao WhatsApp? → A: Deve criar um
   lembrete interno e um `ContactRecord` pendente vinculados ao interesse, para a administradora completar após o
   atendimento.
+- Q: A senha é obrigatória também no cadastro de cliente pelo Google? → A: Não. A senha é obrigatória somente no
+  cadastro tradicional; no cadastro Google, a identidade validada pelo provedor substitui a senha local, mantendo a
+  coleta dos demais dados obrigatórios do cliente.
 
 ## User Scenarios & Testing
 
@@ -200,7 +203,8 @@ interesse com acompanhamento automático e completando o `ContactRecord` pendent
 #### Clientes e autenticação
 
 * **FR-007**: O sistema DEVE permitir que um visitante crie uma conta de cliente.
-* **FR-008**: A criação da conta DEVE exigir nome, sobrenome, e-mail, senha e telefone/WhatsApp.
+* **FR-008**: O cadastro tradicional DEVE exigir nome, sobrenome, e-mail, senha e telefone/WhatsApp. O cadastro pelo
+  Google DEVE exigir nome, sobrenome, e-mail verificado pelo provedor e telefone/WhatsApp, sem exigir senha local.
 * **FR-009**: Os dados coletados no cadastro DEVEM ser utilizados apenas para identificação, autenticação e
   relacionamento comercial previsto na V1.
 * **FR-010**: O sistema DEVE permitir que um cliente cadastrado se autentique posteriormente.
