@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.core.annotation.Order
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.test.context.support.WithMockUser
@@ -101,17 +102,18 @@ class ApiErrorResponseTestConfiguration {
 	fun apiErrorTestController(): ApiErrorTestController = ApiErrorTestController()
 
 	@Bean
+	@Order(0)
 	fun testSecurityFilterChain(
 		http: HttpSecurity,
 		authenticationEntryPoint: RestAuthenticationEntryPoint,
 		accessDeniedHandler: RestAccessDeniedHandler,
 	): SecurityFilterChain {
+		http.securityMatcher("/test/**")
 		http.csrf { it.disable() }
 		http.authorizeHttpRequests {
 			it.requestMatchers("/test/validation", "/test/fallback").permitAll()
 				.requestMatchers("/test/admin").hasRole("ADMIN")
 				.requestMatchers("/test/authenticated").authenticated()
-				.anyRequest().denyAll()
 		}
 		http.exceptionHandling {
 			it.authenticationEntryPoint(authenticationEntryPoint)

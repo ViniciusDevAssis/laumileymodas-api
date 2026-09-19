@@ -22,8 +22,8 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 	private lateinit var jdbcTemplate: JdbcTemplate
 
 	@Test
-	fun `aplica a migration inicial e inicializa o Hibernate com o schema validado`() {
-		assertThat(flyway.info().current()?.version?.version).isEqualTo("1")
+	fun `aplica as migrations e inicializa o Hibernate com o schema validado`() {
+		assertThat(flyway.info().current()?.version?.version).isEqualTo("2")
 		assertThat(entityManagerFactory.isOpen).isTrue()
 
 		val tables = jdbcTemplate.queryForList(
@@ -36,7 +36,10 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 			    'account_external_identity',
 			    'customer',
 			    'refresh_token',
-			    'oauth_handoff'
+			    'oauth_handoff',
+			    'category',
+			    'product',
+			    'product_image'
 			  )
 			""".trimIndent(),
 			String::class.java,
@@ -48,6 +51,9 @@ class FlywaySchemaIntegrationTest : PostgresIntegrationTest() {
 			"customer",
 			"refresh_token",
 			"oauth_handoff",
+			"category",
+			"product",
+			"product_image",
 		)
 	}
 }

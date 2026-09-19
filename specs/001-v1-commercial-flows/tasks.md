@@ -62,22 +62,22 @@ A decisão posterior de permitir cadastro pelo Google tornava ambígua a exigên
 
 ### Tests for User Story 1
 
-- [ ] T014 [P] [US1] Escrever testes das invariantes de ativação, quantidade de imagens e imagem principal em `src/test/kotlin/com/viniciusdevassis/laumileymodas/unit/domain/catalog/ProductTest.kt`
-- [ ] T015 [P] [US1] Escrever testes de persistência, paginação, filtro de status e ordenação de imagens em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/persistence/CatalogPersistenceIntegrationTest.kt`
-- [ ] T016 [P] [US1] Escrever testes HTTP anônimos para listagem, detalhe, produto inativo, produto inexistente e catálogo vazio em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/http/PublicCatalogControllerIntegrationTest.kt`
+- [X] T014 [P] [US1] Escrever testes das invariantes de ativação, quantidade de imagens e imagem principal em `src/test/kotlin/com/viniciusdevassis/laumileymodas/unit/domain/catalog/ProductTest.kt`
+- [X] T015 [P] [US1] Escrever testes de persistência, paginação, filtro de status e ordenação de imagens em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/persistence/CatalogPersistenceIntegrationTest.kt`
+- [X] T016 [P] [US1] Escrever testes HTTP anônimos para listagem, detalhe, produto inativo, produto inexistente e catálogo vazio em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/http/PublicCatalogControllerIntegrationTest.kt`
 
 ### Implementation for User Story 1
 
-- [ ] T017 [P] [US1] Implementar `Category` e suas regras de nome em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/Category.kt`
-- [ ] T018 [P] [US1] Implementar `ProductImage` com URL, `externalId`, principal e ordem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/ProductImage.kt`
-- [ ] T019 [US1] Implementar `Product` e `ProductStatus` com invariantes de ativação e mídia em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/Product.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/ProductStatus.kt`
-- [ ] T020 [P] [US1] Criar tabelas, constraints e índices básicos de categoria, produto e imagem em `src/main/resources/db/migration/V2__create_catalog.sql`
-- [ ] T021 [US1] Implementar entidades JPA e mapeamento de catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/CategoryJpaEntity.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/ProductJpaEntity.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/ProductImageJpaEntity.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/CatalogPersistenceMapper.kt`
-- [ ] T022 [US1] Implementar ports e adapter de leitura paginada do catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/port/catalog/CatalogQueryRepository.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/JpaCatalogQueryRepository.kt`
-- [ ] T023 [P] [US1] Criar catálogo de erros estáveis do catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/CatalogError.kt`
-- [ ] T024 [P] [US1] Implementar os casos de uso de listagem e detalhe público em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/catalog/ListPublicCatalogUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/catalog/GetPublicProductUseCase.kt`
-- [ ] T025 [US1] Implementar DTOs e mapeamento de categoria, produto e imagens sem expor `externalId` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/CatalogResponses.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/CatalogResponseMapper.kt`
-- [ ] T026 [US1] Implementar endpoints públicos de listagem e detalhe conforme OpenAPI em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/PublicCatalogController.kt`
+- [X] T017 [P] [US1] Implementar `Category` e suas regras de nome em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/Category.kt`
+- [X] T018 [P] [US1] Implementar `ProductImage` com URL, `externalId`, principal e ordem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/ProductImage.kt`
+- [X] T019 [US1] Implementar `Product` e `ProductStatus` com invariantes de ativação e mídia em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/Product.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/ProductStatus.kt`
+- [X] T020 [P] [US1] Criar tabelas, constraints e índices básicos de categoria, produto e imagem em `src/main/resources/db/migration/V2__create_catalog.sql`
+- [X] T021 [US1] Implementar entidades JPA e mapeamento de catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/CategoryJpaEntity.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/ProductJpaEntity.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/ProductImageJpaEntity.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/CatalogPersistenceMapper.kt`
+- [X] T022 [US1] Implementar ports e adapter de leitura paginada do catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/port/catalog/CatalogQueryRepository.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/catalog/JpaCatalogQueryRepository.kt`
+- [X] T023 [P] [US1] Criar catálogo de erros estáveis do catálogo em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/catalog/CatalogError.kt`
+- [X] T024 [P] [US1] Implementar os casos de uso de listagem e detalhe público em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/catalog/ListPublicCatalogUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/catalog/GetPublicProductUseCase.kt`
+- [X] T025 [US1] Implementar DTOs e mapeamento de categoria, produto e imagens sem expor `externalId` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/CatalogResponses.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/CatalogResponseMapper.kt`
+- [X] T026 [US1] Implementar endpoints públicos de listagem e detalhe conforme OpenAPI em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/catalog/PublicCatalogController.kt`
 
 **Checkpoint**: US1 funciona anonimamente e pode ser validada sem autenticação ou operações administrativas.
 

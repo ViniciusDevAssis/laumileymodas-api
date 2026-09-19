@@ -4,20 +4,17 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 
-@Testcontainers
 @ActiveProfiles("test")
 abstract class PostgresIntegrationTest {
 
 	companion object {
-		@Container
 		@JvmStatic
 		val postgres: PostgreSQLContainer<*> = PostgreSQLContainer("postgres:17-alpine")
 			.withDatabaseName("laumiley_test")
 			.withUsername("test")
 			.withPassword("test")
+			.apply { start() }
 
 		@DynamicPropertySource
 		@JvmStatic
