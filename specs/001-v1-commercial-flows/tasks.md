@@ -108,7 +108,7 @@ A decisão posterior de permitir cadastro pelo Google tornava ambígua a exigên
 - [ ] T038 [P] [US2] Implementar estados do refresh token rotativo e do handoff OAuth temporário em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/account/RefreshToken.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/account/OAuthHandoff.kt`
 - [ ] T039 [P] [US2] Implementar o registro imutável `Interest` e sua chave idempotente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/interest/Interest.kt`
 - [ ] T040 [P] [US2] Implementar o estado automático pendente de `ContactRecord` vinculado ao interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/ContactRecord.kt`
-- [ ] T041 [P] [US2] Implementar lembrete automático `INTEREST` e propósito `CUSTOMER_REQUEST_FOLLOW_UP` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/Reminder.kt`
+- [ ] T041 [P] [US2] Implementar Reminder automático, pendente e vinculado obrigatoriamente ao Interest e ContactRecord em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/Reminder.kt`
 - [ ] T042 [US2] Criar tabelas e constraints de Interest, ContactRecord e Reminder, incluindo unicidade por interesse em `src/main/resources/db/migration/V3__create_interests_crm_and_follow_up_links.sql`
 - [ ] T043 [US2] Criar índices operacionais previstos no plano em `src/main/resources/db/migration/V4__create_operational_indexes.sql`
 - [ ] T044 [P] [US2] Criar catálogos globalmente únicos de autenticação, conta, segurança e interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/auth/AuthError.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/account/AccountError.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/security/SecurityError.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/interest/InterestError.kt`
@@ -189,34 +189,34 @@ A decisão posterior de permitir cadastro pelo Google tornava ambígua a exigên
 
 ---
 
-## Phase 7: User Story 5 - Registrar contatos e lembretes (Priority: P3)
+## Phase 7: User Story 5 - Registrar contatos e acompanhar atendimentos (Priority: P3)
 
 **Goal**: Manter contatos, lembretes e consentimento, distinguindo acompanhamento pendente de conversa concluída e concluindo contato/lembrete automaticamente vinculados na mesma transação.
 
-**Independent Test**: Registrar contato e lembrete manuais, consultar vencimento/acionabilidade, revogar consentimento proativo e concluir um ContactRecord pendente verificando a conclusão atômica do Reminder.
+**Independent Test**: Registrar um contato manual, consultar o Reminder automático e seu vencimento, revogar consentimento proativo e concluir um ContactRecord pendente verificando a conclusão atômica do Reminder.
 
 ### Tests for User Story 5
 
-- [ ] T085 [P] [US5] Escrever testes de domínio para contato pendente/concluído, lembrete manual/automático, vencimento e acionabilidade em `src/test/kotlin/com/viniciusdevassis/laumileymodas/unit/domain/crm/ContactRecordAndReminderTest.kt`
+- [ ] T085 [P] [US5] Escrever testes de domínio para contato pendente/concluído, Reminder automático, vencimento, acionabilidade e conclusão exclusiva via ContactRecord em `src/test/kotlin/com/viniciusdevassis/laumileymodas/unit/domain/crm/ContactRecordAndReminderTest.kt`
 - [ ] T086 [P] [US5] Escrever testes de domínio do opt-in, revogação idempotente e independência do atendimento solicitado em `src/test/kotlin/com/viniciusdevassis/laumileymodas/unit/domain/customer/ProactiveContactConsentTest.kt`
-- [ ] T087 [P] [US5] Escrever testes PostgreSQL de contatos e lembretes manuais, ordenação e estados derivados em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/persistence/CrmContactReminderIntegrationTest.kt`
+- [ ] T087 [P] [US5] Escrever testes PostgreSQL de contatos manuais, lembretes automáticos, ordenação, vínculo obrigatório ao Interest e estados derivados em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/persistence/CrmContactReminderIntegrationTest.kt`
 - [ ] T088 [P] [US5] Escrever teste transacional de conclusão conjunta, retry e rollback de ContactRecord/Reminder em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/persistence/CompletePendingContactIntegrationTest.kt`
-- [ ] T089 [P] [US5] Escrever testes HTTP de consentimento, contatos, lembretes e proibição de concluir diretamente lembrete automático em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/http/ContactReminderConsentControllerIntegrationTest.kt`
+- [ ] T089 [P] [US5] Escrever testes HTTP de consentimento, contatos, listagem de lembretes e conclusão do Reminder somente pela finalização do ContactRecord em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/http/ContactReminderConsentControllerIntegrationTest.kt`
 
 ### Implementation for User Story 5
 
 - [ ] T090 [P] [US5] Criar catálogo globalmente único de erros de contatos, lembretes e consentimento em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/CrmError.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/customer/CustomerError.kt`
 - [ ] T091 [P] [US5] Completar comportamento de concessão/revogação de consentimento em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/customer/Customer.kt`
 - [ ] T092 [P] [US5] Completar regras de contato manual, complementação e transição PENDING→COMPLETED em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/ContactRecord.kt`
-- [ ] T093 [P] [US5] Completar regras de lembrete manual, automático, vencido e não acionável em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/Reminder.kt`
+- [ ] T093 [P] [US5] Completar regras do Reminder automático vinculado ao Interest, vencimento, acionabilidade enquanto pendente e conclusão conjunta em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/crm/Reminder.kt`
 - [ ] T094 [US5] Ampliar ports e adapters do CRM para leitura, escrita e locks de conclusão em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/port/crm/CrmRepository.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/persistence/crm/JpaCrmRepository.kt`
 - [ ] T095 [P] [US5] Implementar consulta e alteração idempotente do consentimento do próprio CLIENT em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/customer/GetProactiveContactConsentUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/customer/SetProactiveContactConsentUseCase.kt`
 - [ ] T096 [P] [US5] Implementar registro manual e listagem de contatos pendentes/concluídos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/RecordContactUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/ListCustomerContactsUseCase.kt`
-- [ ] T097 [P] [US5] Implementar criação, listagem e conclusão exclusiva de lembretes manuais em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/CreateReminderUseCase.kt`, `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/ListPendingRemindersUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/CompleteManualReminderUseCase.kt`
+- [ ] T097 [P] [US5] Implementar consultas paginadas dos lembretes automáticos pendentes e por cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/ListPendingRemindersUseCase.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/ListCustomerRemindersUseCase.kt`
 - [ ] T098 [US5] Implementar conclusão transacional e idempotente do contato pendente e lembrete associado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/crm/CompletePendingContactRecordUseCase.kt`
 - [ ] T099 [P] [US5] Implementar DTOs e endpoints do consentimento do cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/customer/ContactConsentController.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/customer/ContactConsentDtos.kt`
 - [ ] T100 [US5] Implementar DTOs e endpoints administrativos de contatos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ContactController.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ContactDtos.kt`
-- [ ] T101 [US5] Implementar DTOs e endpoints administrativos de lembretes em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ReminderController.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ReminderDtos.kt`
+- [ ] T101 [US5] Implementar DTOs e endpoints administrativos somente de consulta de lembretes em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ReminderController.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/admin/crm/ReminderDtos.kt`
 
 **Checkpoint**: US5 mantém histórico confiável, acompanhamento pendente, lembretes e consentimento sem automação de mensagens.
 

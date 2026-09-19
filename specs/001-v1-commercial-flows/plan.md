@@ -167,11 +167,11 @@ seus limites como contratos públicos.
   pendentes e concluídos.
 - `CompletePendingContactRecord`: exige dados finais do atendimento, conclui o `ContactRecord` e o
   lembrete automático relacionado na mesma transação.
-- `CreateReminder`, `ListPendingReminders` e `CompleteManualReminder`: mantêm lembretes manuais;
-  atraso e acionabilidade são derivados no momento da leitura. O lembrete automático não aceita
-  conclusão independente.
-- Lembrete com propósito `PROACTIVE_CONTACT` só é acionável com consentimento vigente. O propósito
-  `CUSTOMER_REQUEST_FOLLOW_UP` permanece acionável porque responde a uma iniciativa do cliente.
+- `ListCustomerReminders` e `ListPendingReminders`: consultam os lembretes criados automaticamente
+  pelos interesses; atraso é derivado no momento da leitura.
+- Não existem casos de uso para criação manual ou conclusão independente de lembrete na V1. Todo
+  lembrete permanece acionável independentemente do consentimento proativo,
+  pois acompanha atendimento iniciado pelo cliente.
 
 Nenhum caso de uso de venda, preço, estoque, tamanho, exclusão de produto/categoria ou envio
 automático de comunicação será criado na V1.
@@ -327,12 +327,12 @@ persistente só será adicionado mediante necessidade operacional concreta.
   da geração da resposta. Uma constraint única por `interest_id` em cada acompanhamento é a última
   barreira contra concorrência; repetir a chave idempotente ou consultar o interesse recupera o
   mesmo contexto sem novos registros.
-- O lembrete automático nasce como `CUSTOMER_REQUEST_FOLLOW_UP`, imediatamente acionável mesmo sem
-  consentimento proativo, e mantém canal WhatsApp, data, cliente, identificador e produto por meio
+- O lembrete automático nasce pendente e imediatamente acionável mesmo sem consentimento proativo,
+  e mantém canal WhatsApp, data, cliente, identificador e produto por meio
   dos vínculos persistidos. O `ContactRecord` continua `PENDING` e não compõe o histórico concluído
   até a administradora registrar data efetiva, descrição e resultado do atendimento.
 - Ao finalizar o `ContactRecord`, o caso de uso bloqueia os dois registros e conclui o lembrete na
-  mesma transação. O endpoint de conclusão manual de lembrete rejeita lembretes automáticos.
+  mesma transação. Não existe endpoint ou caso de uso para concluir o lembrete diretamente.
 - O consentimento proativo continua modelado para CRM e possíveis versões futuras, mas não aciona
   API de mensagens nem automação nesta versão.
 
@@ -367,9 +367,9 @@ fluxos.
 ### Unit tests
 
 - Domínio: ativação do produto, quantidade de principais, remoção/troca de imagem, status de
-  lembrete, transição do contato pendente, conclusão coordenada e consentimento.
+  lembrete automático, vencimento, transição do contato pendente, conclusão coordenada e consentimento.
 - Aplicação: idempotência do interesse, derivação da identidade do principal, opt-in/revogação,
-  criação atômica de acompanhamento, acionabilidade de lembretes, conclusão conjunta e compensações
+  criação atômica de acompanhamento, listagem de lembretes, conclusão conjunta e compensações
   de mídia em cada ponto de falha.
 - Infraestrutura pura: geração segura do link WhatsApp, normalização e codificação de valores.
 - Segurança: emissão/validação de claims JWT, rotação e detecção de reuso de refresh token, mapeamento

@@ -223,11 +223,9 @@ reabertura e exclusão não fazem parte da V1.
 |-------|------|-------|
 | `id` | UUID | Primary key |
 | `customer_id` | UUID | FK para `customer`, required |
-| `interest_id` | UUID | FK unique nullable; preenchida somente no acompanhamento automático |
+| `interest_id` | UUID | FK unique required; todo lembrete nasce de um interesse confirmado |
 | `description` | varchar(1000) | Required, trimmed |
 | `due_at` | timestamptz | Required |
-| `purpose` | varchar(40) | `PROACTIVE_CONTACT` ou `CUSTOMER_REQUEST_FOLLOW_UP` |
-| `origin` | varchar(20) | `MANUAL` ou `INTEREST`, required |
 | `status` | varchar(20) | `PENDING` ou `COMPLETED`, required |
 | `completed_at` | timestamptz | Required somente em `COMPLETED` |
 | `created_at` | timestamptz | Required |
@@ -236,11 +234,11 @@ reabertura e exclusão não fazem parte da V1.
 Derivations:
 
 - `overdue = status == PENDING && due_at < now`.
-- `actionable = status == PENDING && (purpose != PROACTIVE_CONTACT || customer consent is true)`.
-- Revogar consentimento não altera `status`; muda imediatamente `actionable` para `false` nos
-  lembretes proativos.
-- Um lembrete `INTEREST` usa `CUSTOMER_REQUEST_FOLLOW_UP`, nasce pendente e acionável com `due_at`
-  igual à data do interesse e só é concluído junto com seu `ContactRecord`.
+- `actionable = status == PENDING`.
+- Revogar consentimento não altera `status` nem `actionable`, pois todo lembrete acompanha uma
+  solicitação iniciada pelo cliente.
+- Todo lembrete nasce pendente com `due_at` igual à data do interesse e só é concluído junto com seu
+  `ContactRecord`. Não existe criação manual nem conclusão independente na V1.
 
 ## Relationships
 
@@ -254,9 +252,9 @@ Product 1 ─── 1..* ProductImage
 Customer 1 ─── * Interest * ─── 1 Product
 Customer 1 ─── * ContactRecord
 Customer 1 ─── * Reminder
-Interest 1 ─── 1 Reminder (acompanhamento automático)
+Interest 1 ─── 1 Reminder
 Interest 1 ─── 1 ContactRecord (acompanhamento automático)
-Reminder 1 ─── 1 ContactRecord (quando originado por interesse)
+Reminder 1 ─── 1 ContactRecord
 ```
 
 ## State Transitions
@@ -286,9 +284,9 @@ AUTHORIZED ── grant again ────────────────�
 PENDING ── complete ──> COMPLETED
 ```
 
-`OVERDUE` e `NOT_ACTIONABLE` são condições derivadas, não estados persistidos. Lembrete `MANUAL` é
-concluído diretamente; lembrete `INTEREST` só muda para `COMPLETED` na transição conjunta do contato.
-Reabertura, edição e exclusão não pertencem à V1.
+`OVERDUE` é uma condição derivada, não um estado persistido. O lembrete só muda para `COMPLETED` na
+transição conjunta do `ContactRecord`. Criação manual, conclusão direta, reabertura, edição e exclusão
+não pertencem à V1.
 
 ### ContactRecord
 
@@ -333,15 +331,15 @@ Interesse não muda de estado nem é removido na V1. A repetição idempotente r
   reutilização concorrente.
 - Rotação consome o refresh token atual e cria seu sucessor em uma única transação com lock; detecção
   de reuso revoga a família atomicamente.
-- Consentimento é alterado em uma transação curta; leituras de lembretes calculam acionabilidade
-  com o valor já confirmado.
+- Consentimento é alterado em uma transação curta e não muda a acionabilidade dos lembretes de
+  atendimento iniciados pelo cliente.
 - Produto e referências de todas as imagens da criação são persistidos juntos.
 - Troca de principal remove e define a flag na mesma transação, com lock no produto.
-- Interesse, lembrete `INTEREST` e `ContactRecord` pendente são persistidos na mesma transação; as
+- Interesse, lembrete e `ContactRecord` pendente são persistidos na mesma transação; as
   constraints de idempotência e unicidade por interesse são a autoridade final contra concorrência.
 - Conclusão de `ContactRecord` automático preenche seus dados finais e altera contato e lembrete para
   `COMPLETED`, com os dois `completed_at`, na mesma transação.
-- Conclusão direta de lembrete é permitida apenas para `origin = MANUAL`.
+- Não existe transação independente para criar ou concluir lembrete.
 
 ## Indexes
 

@@ -210,10 +210,9 @@ Como `ADMIN`, execute os fluxos documentados em `/admin`:
 5. completar o `ContactRecord` com data e descrição e confirmar que o lembrete relacionado muda
    para `COMPLETED` no mesmo commit;
 6. registrar separadamente um contato manual com data, canal e descrição;
-7. criar e concluir um lembrete manual `CUSTOMER_REQUEST_FOLLOW_UP`;
-8. criar lembrete `PROACTIVE_CONTACT` com consentimento vigente;
-9. revogar o consentimento como cliente e confirmar que o lembrete proativo fica `actionable=false`,
-   sem apagar histórico nem bloquear o acompanhamento solicitado pelo cliente.
+7. confirmar que não existem operações para criar ou concluir lembretes diretamente;
+8. revogar o consentimento como cliente e confirmar que o lembrete originado pelo interesse continua
+   acionável, sem apagar histórico nem bloquear o acompanhamento solicitado pelo cliente.
 
 Resultado esperado: apenas `ADMIN` acessa o CRM; lembrete vencido continua `PENDING`; conclusão não
 remove o registro.

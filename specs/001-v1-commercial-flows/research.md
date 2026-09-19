@@ -172,7 +172,7 @@ primeira altera o requisito; a segunda é ambígua e sujeita a relógio.
 **Decision**: gerar no backend uma URL `wa.me` com número oficial em formato E.164 e mensagem mínima
 percent-encoded contendo nome e referência pública do produto. A URL é devolvida como dado, sem
 redirect HTTP, WhatsApp Business API ou envio automático. Antes da resposta, a transação de
-confirmação cria lembrete `CUSTOMER_REQUEST_FOLLOW_UP` e `ContactRecord` `PENDING`; o contato só vira
+confirmação cria `Reminder` e `ContactRecord` `PENDING`; o contato só vira
 histórico concluído quando a administradora registra o resultado, concluindo o lembrete associado na
 mesma transação.
 
