@@ -36,9 +36,9 @@ PostgreSQL e adapters falsos para integrações externas
 
 **Project Type**: API web monolítica
 
-**Performance Goals**: leituras paginadas do catálogo e CRM com p95 de até 500 ms e comandos sem
-upload com p95 de até 1 s sob a carga inicial; latência de upload é medida separadamente por depender
-do provedor externo
+**Performance Goals**: manter consultas paginadas, evitar carregamentos e chamadas externas
+desnecessárias e observar o comportamento da aplicação sob a carga inicial. A V1 não adota limites
+quantitativos de latência como critérios de aceite sem requisito de negócio que os justifique
 
 **Constraints**: uma única aplicação backend; uma conta administrativa vinculada exclusivamente à
 identidade Google autorizada; access token de curta duração e refresh token rotativo; paginação
@@ -244,8 +244,12 @@ automático de comunicação será criado na V1.
 - `401` representa autenticação ausente, inválida ou expirada; `403`, papel autenticado sem permissão.
   O `AuthenticationEntryPoint` e o `AccessDeniedHandler` usam o mesmo `ApiErrorResponse` do restante
   da API. Erros de login e OAuth são genéricos para impedir enumeração de contas.
-- Uma limitação simples e configurável de tentativas de login por origem e identificador será
-  mantida na instância local, sem bloqueio permanente e sem infraestrutura distribuída.
+- Uma limitação simples e configurável de tentativas do login tradicional será mantida em memória na
+  única instância da V1, sem Redis ou infraestrutura distribuída. Somente falhas contam para a janela
+  temporária por origem e identificador normalizado; autenticação bem-sucedida limpa o contador
+  correspondente, e expiração automática evita bloqueio permanente. Ao exceder o limite, o backend
+  responde HTTP 429 com código estável do catálogo de autenticação e o mesmo `ApiErrorResponse` da
+  aplicação. Limite e duração da janela vêm de configuração externa.
 - URLs de sucesso, conclusão de cadastro e erro do frontend serão propriedades do backend e
   validadas no startup. O cliente não fornece `returnUrl`; somente destinos exatos configurados são
   usados, evitando open redirect. CORS aceita apenas origens conhecidas por ambiente, nunca `*` com
@@ -383,6 +387,9 @@ fluxos.
 - Login local válido e inválido; Bearer JWT válido, expirado e adulterado; refresh rotativo, revogado
   e reutilizado; logout; ausência de autenticação com `401`; papel insuficiente com `403`; todos os
   erros preservam `ApiErrorResponse` por `AuthenticationEntryPoint` e `AccessDeniedHandler` próprios.
+- Tentativas inválidas repetidas atingem o limite configurado e retornam `429` no contrato próprio;
+  expiração da janela e autenticações válidas em volume normal não permanecem nem são indevidamente
+  bloqueadas.
 - Login Google de cliente e da conta administrativa cujo `sub` autorizado vem da configuração; outro
   `sub` no fluxo administrativo recebe negação e nunca cria/promove conta. Callback, redirects fixos,
   handoff de uso único e ausência de tokens em URLs serão testados sem rede externa.
