@@ -3,6 +3,7 @@ package com.viniciusdevassis.laumileymodas.infrastructure.security
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -37,6 +38,7 @@ class SecurityConfiguration(
 						"/login/oauth2/**",
 						"/error",
 					).permitAll()
+					.requestMatchers(HttpMethod.GET, "/products", "/products/**").permitAll()
 					.anyRequest().authenticated()
 			}
 			.httpBasic { it.disable() }

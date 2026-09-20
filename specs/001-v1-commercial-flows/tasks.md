@@ -64,18 +64,18 @@ válida.
 
 ### Tests for User Story 1
 
-- [ ] T014 [P] [US1] Criar testes de integração do schema, constraints e consultas do catálogo em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CatalogPersistenceIntegrationTest.kt`
-- [ ] T015 [P] [US1] Criar testes HTTP do catálogo anônimo, paginação, imagens ordenadas, 404 e links HAL em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/PublicCatalogIntegrationTest.kt`
+- [X] T014 [P] [US1] Criar testes de integração do schema, constraints e consultas do catálogo em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CatalogPersistenceIntegrationTest.kt`
+- [X] T015 [P] [US1] Criar testes HTTP do catálogo anônimo, paginação, imagens ordenadas, 404 e links HAL em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/PublicCatalogIntegrationTest.kt`
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Criar tabelas category, product e product_image com FKs, checks e índices em `src/main/resources/db/migration/V1__create_catalog.sql`
-- [ ] T017 [P] [US1] Implementar entidades JPA `Category`, `Product` e `ProductImage` com invariantes de ativação/imagem principal em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Category.kt`, `Product.kt` e `ProductImage.kt`
-- [ ] T018 [P] [US1] Definir `ProductStatus` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/DomainEnums.kt`
-- [ ] T019 [US1] Criar repositories Spring Data e consultas paginadas de produtos ativos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/CatalogRepositories.kt`
-- [ ] T020 [US1] Implementar consultas públicas coesas em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
-- [ ] T021 [P] [US1] Definir DTOs públicos de produto/categoria/imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CatalogDtos.kt`
-- [ ] T022 [US1] Implementar `GET /products` e `GET /products/{id}` com `PagedModel`, `EntityModel` e links em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/CatalogController.kt`
+- [X] T016 [US1] Criar tabelas category, product e product_image com FKs, checks e índices em `src/main/resources/db/migration/V1__create_catalog.sql`
+- [X] T017 [P] [US1] Implementar entidades JPA `Category`, `Product` e `ProductImage` com invariantes de ativação/imagem principal em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Category.kt`, `Product.kt` e `ProductImage.kt`
+- [X] T018 [P] [US1] Definir `ProductStatus` em `../../src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/ProductStatus.kt`
+- [X] T019 [US1] Criar repositories Spring Data e consultas paginadas de produtos ativos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/CatalogRepositories.kt`
+- [X] T020 [US1] Implementar consultas públicas coesas em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
+- [X] T021 [P] [US1] Definir DTOs públicos de produto/categoria/imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CatalogDtos.kt`
+- [X] T022 [US1] Implementar `GET /products` e `GET /products/{id}` com `PagedModel`, `EntityModel` e links em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/CatalogController.kt`
 
 **Checkpoint**: catálogo público é um incremento utilizável e não depende da autenticação ou CRM.
 
@@ -104,7 +104,7 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T030 [US2] Criar interest, reminder e contact_record com uniques por interest_id em `src/main/resources/db/migration/V3__create_interests_and_crm.sql`
 - [ ] T031 [P] [US2] Implementar entidades JPA de identidade e cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Account.kt`, `AccountExternalIdentity.kt`, `Customer.kt`, `RefreshToken.kt` e `OAuthHandoff.kt`
 - [ ] T032 [P] [US2] Implementar entidades JPA `Interest`, `Reminder` e `ContactRecord` e suas transições em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Interest.kt`, `Reminder.kt` e `ContactRecord.kt`
-- [ ] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/DomainEnums.kt`
+- [ ] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `../../src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/ProductStatus.kt`
 - [ ] T034 [US2] Criar repositories Spring Data para contas, clientes, tokens e handoffs em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/AccountRepository.kt` e `CustomerRepository.kt`
 - [ ] T035 [US2] Criar repositories Spring Data para Interest, Reminder e ContactRecord em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/InterestRepository.kt` e `CrmRepositories.kt`
 - [ ] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/JwtService.kt`
