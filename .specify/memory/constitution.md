@@ -1,8 +1,8 @@
 <!--
 Sync Impact Report
-- Version change: template without version -> 1.0.0
-- Modified principles: template placeholders -> ten project principles
-- Added sections: Product and Technology Constraints; Development Workflow and Quality Gates
+- Version change: 1.0.0 -> 1.1.0
+- Modified principles: II, V, VI, VII, X e Development Workflow and Quality Gates
+- Added sections: none
 - Removed sections: none
 - Follow-up TODOs: none
 -->
@@ -31,6 +31,10 @@ preserve clareza, segurança, testabilidade e uma possibilidade razoável de evo
 Complexidade adicional DEVE ter uma necessidade atual identificável e uma justificativa registrada
 no artefato de planejamento correspondente. A evolução futura do produto não autoriza antecipar
 problemas que ainda não existem.
+
+Uma classe, interface ou camada nova DEVE justificar sua existência por uma regra de negócio, um
+limite de segurança, uma integração externa ou reutilização concreta. Organização visual,
+simetria entre camadas e possível uso futuro NÃO constituem justificativa suficiente.
 
 ### III. Backend como Autoridade
 
@@ -65,12 +69,17 @@ implementação sem proteger um requisito ou risco observável.
 Os testes DEVEM tornar mudanças seguras e comunicar as invariantes do negócio, sem acoplar a suíte
 a uma estrutura interna que possa evoluir sem alterar o comportamento.
 
+Testes de arquitetura que imponham quantidade de camadas, interfaces, mappers ou classes NÃO DEVEM
+substituir testes do comportamento observável. A estrutura interna PODE ser simplificada sem exigir
+reescrita dos testes quando o contrato e as regras permanecerem iguais.
+
 ### VI. Integrações Externas Isoladas
 
 WhatsApp, e-mail, armazenamento de mídia e outros serviços externos NÃO DEVEM definir o modelo de
 negócio interno. Tipos, SDKs e detalhes específicos de fornecedores DEVEM permanecer isolados na
-infraestrutura sempre que possível. Casos de uso e regras centrais DEVEM depender de contratos
-definidos pela aplicação quando uma abstração trouxer benefício concreto.
+infraestrutura. Uma interface própria DEVE existir quando representar um limite externo relevante,
+como armazenamento de mídia. Interfaces para persistência interna ou delegações sem alternativa
+real NÃO DEVEM ser criadas apenas para reproduzir um padrão arquitetural.
 
 Trocar uma integração externa NÃO DEVE exigir alterações desnecessárias nas regras centrais do
 sistema.
@@ -85,14 +94,28 @@ O sistema DEVE separar responsabilidades conceituais da seguinte forma:
 - `infrastructure`: persistência, integrações, configuração técnica e implementações dependentes de
   frameworks ou serviços externos.
 
-Essa divisão orienta responsabilidades e NÃO determina antecipadamente a estrutura definitiva de
-packages. Fluxos DEVEM ser conduzidos preferencialmente por casos de uso em `application`, que
-coordenam ações, delegam regras ao domínio e detalhes técnicos à infraestrutura.
+Essa divisão orienta responsabilidades e NÃO exige um modelo ou uma interface própria para cada
+camada. O fluxo padrão PODE ser `Controller -> Service -> Spring Data Repository -> entidade JPA`.
+Entidades de negócio PODEM ser também entidades JPA, e repositórios internos PODEM ser interfaces
+Spring Data usadas diretamente pelos services. Duplicar entidade de domínio e entidade de
+persistência, criar mapper entre modelos equivalentes ou criar adapter que apenas delega ao
+repositório é PROIBIDO sem benefício concreto documentado.
+
+Fluxos DEVEM ser coordenados por services coesos na camada `application`. Um service PODE agrupar
+várias operações do mesmo contexto; não se exige uma classe de caso de uso por operação. Controllers
+DEVEM permanecer pequenos, transações pertencem aos services e detalhes de persistência permanecem
+nos repositórios. Tipos de Spring Security e SDKs externos NÃO DEVEM contaminar regras de negócio.
 
 DDD DEVE ser aplicado de forma leve. Entidades, value objects, serviços de domínio, agregados,
 interfaces e camadas adicionais somente DEVEM ser introduzidos quando melhorarem concretamente a
 clareza, a testabilidade, a manutenção ou a evolução. Uma única classe NÃO PODE acumular regras de
 negócio, persistência, autorização, integrações e orquestração a ponto de formar um God Service.
+
+O número de classes NÃO é uma medida de qualidade. Construtores ou atribuições diretas DEVEM ser
+preferidos a mappers triviais; `java.time.Clock` PODE ser injetado diretamente quando o tempo fizer
+parte de uma regra; UUIDs PODEM ser gerados diretamente pela aplicação ou persistência. Uma
+abstração adicional exige um segundo comportamento real, um limite externo ou uma regra que ela
+torne materialmente mais clara.
 
 ### VIII. Banco de Dados Versionado
 
@@ -125,10 +148,10 @@ O fluxo de mídia DEVE obedecer às seguintes responsabilidades:
 5. o frontend utiliza as informações fornecidas pela API para exibir a imagem.
 
 O frontend NÃO PODE executar upload ou exclusão diretamente no Cloudinary. O ciclo de vida dos
-assets DEVE ser coordenado por `application`, e a comunicação com o provedor DEVE permanecer em
-`infrastructure`. `domain` e `application` NÃO PODEM depender diretamente de SDKs, APIs ou tipos do
-Cloudinary. Uma abstração para armazenamento DEVE ser usada quando ela mantiver o provedor isolado
-com benefício concreto.
+assets DEVE ser coordenado por um service coeso em `application`, e a comunicação com o provedor
+DEVE permanecer em `infrastructure`. `domain` e `application` NÃO PODEM depender diretamente de
+SDKs, APIs ou tipos do Cloudinary. Uma abstração pequena para armazenamento de mídia DEVE manter o
+provedor isolado.
 
 O sistema DEVE preservar referências suficientes para administrar os assets e DEVE coordenar
 persistência e operações externas para evitar, dentro das garantias disponíveis, referências
@@ -171,6 +194,10 @@ aceitação, autorização, privacidade, migrations quando houver mudança de sc
 proporcionais ao risco. Complexidade ou exceções aos princípios DEVEM ser justificadas por escrito
 no plano ou na revisão da mudança.
 
+O planejamento e a revisão DEVEM aplicar um teste de necessidade a cada abstração: qual requisito,
+risco ou integração exige esta classe ou interface? Se não houver resposta concreta, a solução DEVE
+ser simplificada antes da implementação.
+
 ## Governance
 
 Esta constituição prevalece sobre práticas informais e decisões técnicas conflitantes. Todo plano,
@@ -193,4 +220,4 @@ conformidade DEVE ser revisada em cada planejamento e antes de cada entrega rele
 constituição também DEVE ser revisitada quando o escopo do produto ou a arquitetura mudar de forma
 material.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-18 | **Last Amended**: 2026-09-18
+**Version**: 1.1.0 | **Ratified**: 2026-09-18 | **Last Amended**: 2026-09-20

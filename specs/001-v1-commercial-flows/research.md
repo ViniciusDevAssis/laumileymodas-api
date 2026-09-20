@@ -1,222 +1,254 @@
 # Research: Operação Comercial V1
 
-## 1. Arquitetura do monólito
+Este documento registra somente decisões técnicas necessárias para implementar a specification.
+Cada decisão aplica o teste de necessidade da Constitution: uma abstração só permanece quando
+protege uma regra, um limite de segurança, uma integração externa ou reutilização concreta.
 
-**Decision**: manter um único módulo e processo Spring Boot, organizado pelas responsabilidades
-`presentation`, `application`, `domain` e `infrastructure`. Controllers chamam casos de uso
-concretos; ports existem somente para persistência, mídia, relógio, segurança e geração do contexto
-do WhatsApp.
+## 1. Organização pragmática
 
-**Rationale**: atende aos limites definidos pela Constitution, preserva regras testáveis e evita
-interfaces, módulos e deploys sem mais de uma implementação ou consumidor.
+**Decision**: usar o fluxo predominante `Controller -> Service -> Spring Data Repository ->
+entidade JPA`, organizado pelas responsabilidades `presentation`, `application`, `domain` e
+`infrastructure`.
 
-**Alternatives considered**: módulos Maven separados, hexagonal completa com interface para cada
-caso de uso e microsserviços por contexto. Foram rejeitados porque não resolvem uma necessidade da
-V1 e aumentam coordenação, mapeamento e operação.
+**Rationale**: as quatro responsabilidades continuam claras sem duplicar o mesmo conceito em
+modelos diferentes. Services coesos por contexto concentram transações e orquestração; entidades
+JPA representam o negócio; repositories Spring Data cuidam da persistência; controllers tratam
+HTTP e HATEOAS.
 
-## 2. Persistência e modelo de domínio
+**Alternatives considered**:
 
-**Decision**: usar Spring Data JPA nos adapters de `infrastructure`, PostgreSQL como fonte de verdade
-e modelos Kotlin no domínio. Mapear somente limites que protegem comportamento; consultas podem
-retornar projeções próprias da aplicação.
+- uma classe de caso de uso por operação: rejeitada por fragmentar fluxos simples;
+- ports e adapters para cada repository: rejeitados porque existe uma única persistência interna;
+- entidades de domínio separadas de entidades JPA: rejeitadas porque os modelos seriam equivalentes;
+- arquitetura hexagonal completa ou Clean Architecture estrita: rejeitada por não haver necessidade
+  atual que compense o custo.
 
-**Rationale**: JPA reduz o código de persistência, enquanto a separação impede que DTOs HTTP ou
-tipos do Cloudinary definam o domínio. O modelo rico fica concentrado nas invariantes de produto,
-interesse, consentimento e lembrete.
+## 2. Estrutura de código
 
-**Alternatives considered**: SQL manual para todo acesso, modelos JPA serializados diretamente e
-uma camada de repositório genérico. SQL manual ampliaria o trabalho da V1; expor JPA pela API
-acoplaria contratos; repositório genérico esconderia consultas específicas sem benefício concreto.
+**Decision**: adotar a estrutura abaixo, permitindo subpackages apenas quando um contexto crescer:
 
-## 3. JWT, refresh token e Google OpenID Connect
+```text
+presentation/
+  controllers/
+  dtos/
+  advice/
+application/
+  AuthService.kt
+  GoogleAuthService.kt
+  CatalogService.kt
+  InterestService.kt
+  CrmService.kt
+  ProductMediaService.kt
+domain/
+  entities/
+  enums/
+  exceptions/
+infrastructure/
+  repositories/
+  security/
+  cloudinary/
+  config/
+```
 
-**Decision**: usar Spring Security de forma stateless para a API. A aplicação emite access token JWT
-assinado assimetricamente, válido inicialmente por 15 minutos, e refresh token JWT próprio, com tipo
-e audiência distintos, válido por 30 dias. O hash do `jti` do refresh é persistido e rotacionado a
-cada uso. O refresh token fica em cookie `HttpOnly`, `Secure` em produção, sem `Domain`, restrito a
-`/api/v1/auth` e com `SameSite=Lax` quando frontend e API são same-site; implantação cross-site exige
-`SameSite=None`, HTTPS e origem explícita. Refresh e logout exigem `POST`, header CSRF double-submit e
-`Origin` autorizado. Reuso do token anterior revoga sua família. CSRF não é desabilitado globalmente:
-o matcher protege os endpoints que consomem cookies, enquanto endpoints Bearer não dependem deles.
+**Rationale**: esses services correspondem a contextos funcionais reais. Novos services ou helpers
+só serão criados quando uma classe deixar de ser coesa ou houver reutilização real.
 
-Clientes podem autenticar por e-mail/senha ou por Google OAuth 2.0 Authorization Code com OpenID
-Connect, somente com `openid`, `profile` e `email`. A aplicação valida integralmente o retorno Google
-e usa o `sub` como único identificador confiável para localizar vínculo externo. Se o `sub` não estiver
-vinculado e o e-mail já existir em outra conta local, o fluxo é rejeitado; `email_verified` não
-autoriza account linking. Sem vínculo e sem conflito de e-mail, segue o cadastro Google. Tokens Google
-nunca autorizam diretamente a API. O handshake mantém `state`, nonce e a intenção cliente/admin em
-cookie curto assinado/cifrado. O callback cria um handoff opaco de uso único, persiste somente seu
-hash, configura-o em cookie `HttpOnly` por até 10 minutos e redireciona para uma rota fixa do frontend.
-O frontend troca o handoff por tokens da aplicação em `POST` protegido por CSRF ou, para novo cliente,
-envia somente os dados adicionais. O handoff não funciona como access token, é consumido uma vez e
-nunca aparece na URL.
+**Alternatives considered**: packages por camada com subestrutura completa por agregado e packages
+por feature com cópias das quatro camadas; ambos foram rejeitados na V1 por multiplicarem arquivos
+sem melhorar o comportamento.
 
-O token CSRF será fornecido por `CookieCsrfTokenRepository.withHttpOnlyFalse()`. Um
-`GET /auth/csrf` público força a criação/renovação do cookie `XSRF-TOKEN`; o frontend copia seu valor
-para `X-XSRF-TOKEN` em refresh, logout e consumo/conclusão de handoff. Esse endpoint não autentica nem
-emite tokens da aplicação.
+## 3. REST e hipermídia
 
-**Rationale**: access tokens curtos limitam a janela de uma credencial vazada; refresh stateful e
-rotativo permite logout e revogação sem blacklist de todos os access tokens. O `sub` é estável mesmo
-quando o e-mail Google muda, enquanto o `Account` local mantém autorização e domínio independentes
-do provedor. Recusar vínculo por e-mail impede tomada de conta; o endpoint CSRF torna explícito o
-bootstrap exigido pelo padrão double-submit.
+**Decision**: modelar URLs com recursos e semântica HTTP; adicionar Spring HATEOAS e representar
+recursos com `EntityModel`, coleções paginadas com `PagedModel` e mídia `application/hal+json`.
+Links serão montados nos controllers ou por pequenas funções locais. Um assembler dedicado só será
+extraído quando houver duplicação relevante.
 
-**Alternatives considered**: sessão persistida, refresh JWT sem estado, access token longo, uso do ID
-token Google como bearer da API, retorno de tokens no callback/URL e vinculação automática por e-mail
-verificado. Sessão foi substituída pela decisão do projeto; refresh sem estado não permite
-rotação/reuso confiáveis; token longo amplia
-risco; token Google acopla a autorização interna ao provedor; JSON no callback prejudica o handoff
-ao frontend e tokens na URL vazam por histórico, logs e referrer. Vínculo por e-mail foi rejeitado
-porque e-mail não prova controle da credencial local já existente.
+**Rationale**: hipermídia permite que o frontend descubra navegação e ações válidas sem transformar
+o projeto em uma hierarquia de assemblers. `201 Created` inclui `Location`; alterações parciais e
+transições usam `PATCH`; substituições de singleton usam `PUT`; remoções usam `DELETE`; respostas sem
+corpo usam `204`.
 
-**Sources**:
+**Links relevantes**:
 
-- [Spring Security OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html)
-- [Spring Security Resource Server JWT](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
-- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+- produtos públicos: `self`, coleção, categoria e criação de interesse quando aplicável;
+- interesse: `self`, produto e URL externa do WhatsApp;
+- recursos administrativos: links somente para ações válidas no estado atual;
+- `ContactRecord` pendente: link para conclusão; concluído não anuncia nova conclusão;
+- `Reminder`: consulta e contato correspondente, sem link de conclusão independente.
 
-## 4. Senhas e autorização
+Tokens, respostas CSRF, redirecionamentos OAuth e erros não recebem hipermídia porque são mensagens
+de protocolo ou falha, não recursos navegáveis do negócio.
 
-**Decision**: persistir senhas com `DelegatingPasswordEncoder` e BCrypt, custo inicial 12 calibrado
-no ambiente. Limitar a entrada a 64 caracteres e 72 bytes UTF-8 para não ultrapassar o limite do
-algoritmo. Centralizar a configuração, habilitar `@EnableMethodSecurity`, usar apenas `ROLE_CLIENT` e
-`ROLE_ADMIN`, negar por padrão e combinar regras de rota com proteção nos casos de uso sensíveis.
-Casos de uso recebem um `AuthenticatedAccount` próprio, sem depender de tipos do Spring Security.
+**Alternatives considered**: HATEOAS completo com assembler por DTO, affordances e perfis desde o
+início foi rejeitado por cerimônia; JSON sem links foi rejeitado pela decisão explícita do projeto.
 
-**Rationale**: BCrypt já é suportado pelo Spring Security, inclui salt e evita uma dependência
-criptográfica adicional. O encoder delegador permite evolução futura. A autorização em duas
-camadas impede que uma rota nova exponha operação e mantém o backend como autoridade.
+Referência: [Spring HATEOAS](https://docs.spring.io/spring-hateoas/docs/current/reference/html/).
 
-**Alternatives considered**: Argon2id e autorização apenas no controller. Argon2id é uma boa evolução,
-mas requer uma dependência adicional; autorização apenas na borda não protege chamadas internas ou
-erros de mapeamento.
+## 4. Persistência e modelo
 
-**Source**: [Spring Security password storage](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html)
+**Decision**: usar entidades JPA como modelo central, repositories Spring Data diretos, PostgreSQL,
+Flyway como autoridade do schema e Hibernate com `ddl-auto=validate`.
 
-## 5. Provisionamento administrativo
+**Rationale**: elimina modelos, mappers e adapters duplicados sem abrir mão de migrations,
+constraints e transações. IDs usam UUID gerado pela aplicação/JPA, sem `IdGenerator`. Regras que
+dependem do tempo recebem `java.time.Clock` diretamente no service correspondente.
 
-**Decision**: separar o início do login Google de cliente e de administradora, protegendo a intenção
-no `state`. A única administradora fica restrita ao `sub` Google autorizado e ao e-mail verificado da
-loja, ambos fornecidos por configuração externa segura e nunca pelo frontend. O primeiro callback administrativo válido
-cria o
-`Account` `ADMIN` e a identidade externa em uma transação protegida pela constraint de uma única
-administradora. Não há senha administrativa nem endpoint de cadastro ou promoção.
+**Alternatives considered**: `EntityManager` encapsulado em adapters, DAOs manuais e H2 foram
+rejeitados. Testes de integração usam o mesmo PostgreSQL da produção por Testcontainers.
 
-**Rationale**: o privilégio depende da intenção administrativa explícita, do identificador imutável
-emitido pelo Google e de configuração explícita da loja, não de simples coincidência de e-mail. Isso
-permite o primeiro acesso sem seed de senha e impede que qualquer conta Google obtenha `ADMIN`.
+## 5. Acompanhamento do interesse
 
-**Alternatives considered**: permitir uma lista de e-mails, promover cliente existente, seed com
-senha ou criar administrador em todo startup. E-mail isolado pode mudar ou colidir; promoção pública
-abre elevação de privilégio; senha/seed contradiz a autenticação Google administrativa definida.
+**Decision**: a confirmação idempotente de um `Interest` cria, na mesma transação, exatamente um
+`Reminder` e um `ContactRecord PENDING`. `Reminder.interest_id` e
+`ContactRecord.interest_id` são únicos; ambos se relacionam pelo interesse e não mantêm referência
+circular entre si.
 
-## 6. Flyway e schema
+**Rationale**: constraints únicas garantem a cardinalidade exigida e o mesmo `interest_id` fornece
+o vínculo necessário. A conclusão do contato atualiza o `ContactRecord` e seu `Reminder` na mesma
+transação. Não há endpoint nem service para criar ou concluir Reminder isoladamente.
 
-**Decision**: Flyway é a única autoridade para schema; Hibernate usa `ddl-auto=validate`. Migrations
-incluem tabelas de negócio, identidades externas, refresh tokens, índices e constraints.
+**Alternatives considered**: `contact_record.reminder_id` mais `reminder.contact_record_id` foi
+rejeitado por circularidade; eventos ou mensageria foram rejeitados porque a consistência precisa
+ser imediata dentro de um único monólito.
 
-**Rationale**: ambientes reproduzíveis e mudanças auditáveis são exigidos pela Constitution. Usar
-PostgreSQL real nos testes cobre índices parciais, locks e tipos que H2 não reproduz.
+## 6. Imagens e Cloudinary
 
-**Alternatives considered**: `ddl-auto=update`, scripts manuais e H2 nos testes. Foram rejeitados por
-produzirem drift de schema ou comportamento diferente da produção.
+**Decision**: manter somente a interface `MediaStorage` na aplicação e uma implementação
+`CloudinaryMediaStorage` na infraestrutura. `ProductMediaService` coordena upload/exclusão e
+persistência das referências `url` e `externalId`.
 
-## 7. Upload e referências de mídia
+**Rationale**: Cloudinary é um limite externo real e a Constitution exige isolamento. A relação
+permanece `Product 1:N ProductImage`, com ordem e exatamente uma imagem principal. Consultas de
+produto retornam as URLs ordenadas.
 
-**Decision**: a aplicação expõe a porta `MediaStorage`; o adapter Cloudinary faz upload pelo backend
-e devolve `externalId` e `secureUrl`. A chave externa é gerada antes do upload e não pode sobrescrever
-asset existente.
+**Consistência**:
 
-**Rationale**: o domínio não conhece o fornecedor, o banco mantém somente as referências exigidas e
-o prefixo previsível facilita compensação e auditoria.
+- upload externo ocorre antes da persistência da referência;
+- se a persistência falhar, o service tenta remover o asset recém-enviado;
+- exclusão local só é confirmada depois da exclusão externa bem-sucedida;
+- falhas de compensação são registradas sem expor credenciais ou resposta do provedor;
+- nenhuma transação distribuída ou fila é introduzida na V1.
 
-**Alternatives considered**: upload direto do frontend, armazenamento binário no PostgreSQL e
-filesystem local. Todos contradizem as decisões do projeto ou dificultam segurança e operação.
+**Alternatives considered**: SDK do Cloudinary dentro da entidade/service, upload direto do
+frontend e microsserviço de mídia foram rejeitados pela Constitution.
 
-**Sources**:
+## 7. Autenticação local e access token
 
-- [Cloudinary Java upload](https://cloudinary.com/documentation/java_image_and_video_upload)
-- [Cloudinary Upload API and destroy](https://cloudinary.com/documentation/image_upload_api_reference)
+**Decision**: usar Spring Security stateless, `@EnableMethodSecurity`, BCrypt via
+`DelegatingPasswordEncoder` com custo 12 e access token JWT curto assinado com HMAC SHA-256 por um
+segredo externo forte. O JWT contém somente `sub` da Account, papel, emissor, audiência e tempos.
 
-## 8. Consistência entre PostgreSQL e Cloudinary
+**Rationale**: apenas o monólito emite e valida o token na V1; HMAC reduz configuração de chaves sem
+reduzir a proteção nesse limite. O Resource Server do Spring Security valida assinatura, expiração,
+emissor e audiência. Controllers extraem apenas UUID e papel, sem levar tipos do Spring Security às
+entidades.
 
-**Decision**: usar ordenação de operações e compensação síncrona em melhor esforço. Novos assets são
-enviados antes do commit local e removidos se upload ou persistência falhar. Assets substituídos ou
-removidos são apagados somente depois que a referência local deixa de ser publicada.
+**Alternatives considered**: RSA, `kid` e JWKS foram rejeitados porque nenhum outro serviço valida
+os tokens; sessão de servidor foi rejeitada porque a API é stateless.
 
-**Rationale**: não existe transação distribuída com o Cloudinary. A ordem escolhida prioriza nunca
-deixar o catálogo apontando para conteúdo removido. Falhas raras podem deixar asset órfão, que é um
-risco menor e auditável.
+Referência: [Spring Security JWT](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
 
-**Alternatives considered**: outbox com worker de limpeza, mensageria, sobrescrita do mesmo asset e
-exclusão externa antes do commit. Retry persistente amplia a arquitetura sem demanda operacional;
-sobrescrita e exclusão antecipada podem quebrar referências publicadas.
+## 8. Refresh token, logout e CSRF
 
-## 9. Idempotência do interesse
+**Decision**: usar refresh token opaco, aleatório e de alta entropia. Apenas seu hash é persistido.
+O token fica em cookie `HttpOnly`, `Secure` em produção, `SameSite` configurável e restrito a
+`/api/v1/auth`. A rotação consome o token atual e cria sucessor da mesma família; reuso revoga a
+família.
 
-**Decision**: exigir `Idempotency-Key` em cada confirmação. A combinação cliente/chave é única; a
-mesma chave com o mesmo produto retorna o resultado existente e com produto diferente retorna
-conflito. A primeira confirmação persiste atomicamente `Interest`, `Reminder` e `ContactRecord`
-pendente; unicidades por `interest_id` impedem acompanhamento duplicado. Um novo interesse
-intencional usa nova chave.
+`CookieCsrfTokenRepository` publica `XSRF-TOKEN` legível pelo frontend e valida o header
+`X-XSRF-TOKEN`. `GET /auth/csrf` materializa o token sem autenticar ou emitir credenciais. CSRF é
+exigido apenas nos endpoints que consomem cookies: refresh, logout e troca/conclusão do handoff
+Google. Bearer-only endpoints não dependem de cookie e são ignorados pelo matcher CSRF.
 
-**Rationale**: protege contra duplo clique, retry e concorrência sem impedir que o cliente demonstre
-novo interesse no mesmo produto em outro momento, e garante que todo interesse confirmado tenha um
-único acompanhamento completo.
+**Rationale**: refresh não precisa ser JWT; opacidade reduz claims e chaves. CSRF permanece
+necessário porque o navegador envia cookies automaticamente.
 
-**Alternatives considered**: unicidade eterna cliente/produto e deduplicação por janela de tempo. A
-primeira altera o requisito; a segunda é ambígua e sujeita a relógio.
+**Alternatives considered**: refresh JWT e CSRF desabilitado globalmente foram rejeitados.
 
-## 10. Contexto do WhatsApp
+Referência: [Spring Security CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
 
-**Decision**: gerar no backend uma URL `wa.me` com número oficial em formato E.164 e mensagem mínima
-percent-encoded contendo nome e referência pública do produto. A URL é devolvida como dado, sem
-redirect HTTP, WhatsApp Business API ou envio automático. Antes da resposta, a transação de
-confirmação cria `Reminder` e `ContactRecord` `PENDING`; o contato só vira
-histórico concluído quando a administradora registra o resultado, concluindo o lembrete associado na
-mesma transação.
+## 9. Google OpenID Connect
 
-**Rationale**: mantém destino e conteúdo sob controle do backend, evita open redirect e não inclui
-dados pessoais. O registro e seu acompanhamento independem de o dispositivo conseguir abrir o
-WhatsApp, sem alegar que uma conversa ocorreu.
+**Decision**: usar OAuth2 Login/OIDC do Spring Security com escopos `openid`, `profile` e `email`.
+Existem dois pontos de início, `/auth/google/client` e `/auth/google/admin`, cuja intenção é
+protegida no `state`. Ambos convergem para o registration Google e para o callback público
+`/api/v1/auth/google/callback`.
 
-**Alternatives considered**: URL montada no frontend, destino enviado pelo cliente e integração com
-API de mensagens. As duas primeiras perdem autoridade; a última adiciona automação fora da V1.
+O `sub` é o identificador confiável. Login só prossegue quando o `sub` já está vinculado. Um novo
+`sub` sem Account inicia cadastro de cliente. Se o e-mail já pertence a Account sem aquele vínculo,
+o fluxo é rejeitado; não há linking automático nem manual na V1. O fluxo ADMIN exige que o `sub`
+seja exatamente o valor configurado no backend e nunca promove uma Account pública.
 
-## 11. Contratos e erros
+Após o callback, um handoff opaco de uso único e curta duração é guardado em cookie `HttpOnly`; seu
+hash e estado mínimo ficam no PostgreSQL. O backend redireciona somente para URLs configuradas. O
+frontend troca o handoff com CSRF; tokens sensíveis nunca aparecem na URL. Cliente Google novo
+informa apenas dados adicionais necessários antes da troca final.
 
-**Decision**: documentar o contrato em OpenAPI 3.1, usar `/api/v1`, paginação limitada e um payload
-próprio `ApiErrorResponse` em `application/json`. Catálogos de
-erros por contexto fornecem código globalmente único e mensagem segura; exceptions específicas
-carregam esses erros e o `GlobalExceptionHandler` os traduz para HTTP. Violações de validação,
-`AuthenticationEntryPoint` e `AccessDeniedHandler` usam o mesmo payload. O fallback 500 expõe apenas
-`INTERNAL_001` e uma mensagem genérica. Uploads usam multipart, e respostas públicas nunca incluem
-identificador externo do Cloudinary, hash, token ou dados internos do CRM.
+**Rationale**: o registro temporário permite uso único e invalidação confiável sem expor identidade
+ou token na URL. O domínio persiste apenas identidade externa genérica (`provider`, `subject`).
 
-**Rationale**: um contrato único orienta frontend, testes e validação e elimina formatos divergentes entre MVC,
-validação e Spring Security.
+**Alternatives considered**: vincular por e-mail, callback com JSON, access token na URL e redirect
+URL fornecida pelo cliente foram rejeitados por risco de tomada de conta ou vazamento.
 
-**Alternatives considered**: formato RFC 9457, contratos apenas em controllers ou documento
-narrativo. O formato RFC foi descartado por decisão explícita; as demais alternativas permitem drift
-e são menos verificáveis.
+Referência: [Spring Security OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html).
 
-## 12. Estratégia de testes
+## 10. CORS e ambientes
 
-**Decision**: regras puras e orquestração usam testes unitários com fakes; contratos, segurança,
-migrations e persistência usam Spring Boot Test, MockMvc e PostgreSQL Testcontainers. Docker é
-necessário para os containers efêmeros da suíte de integração, não para executar a aplicação pela
-IDE. Cloudinary e Google não são chamados pela suíte comum.
+**Decision**: CORS é centralizado no Spring Security. Desenvolvimento aceita apenas as origens
+locais configuradas; produção exige lista explícita do domínio oficial. Nunca se combina origem
+curinga com credenciais. As configurações variam por ambiente sem duplicar regras de negócio.
 
-**Rationale**: os testes protegem comportamento e riscos reais, incluindo constraints e transações
-do PostgreSQL, sem ficarem instáveis por rede ou credenciais externas.
+**Rationale**: mantém o desenvolvimento simples e torna a restrição de produção explícita antes da
+publicação.
 
-**Alternatives considered**: somente mocks, H2 ou Cloudinary real no CI. Eles não validam o banco de
-produção ou tornam a suíte lenta e instável.
+## 11. Rate limiting
 
-## Resolved Unknowns and Residual Trade-offs
+**Decision**: implementar um limitador em memória para tentativas falhas de autenticação, adequado à
+única instância da V1. A chave combina origem e identificador normalizado sem registrar senha. Uma
+autenticação bem-sucedida limpa o contador aplicável; excesso retorna `429` no mesmo
+`ApiErrorResponse`.
 
-Não restam decisões técnicas pendentes. Specification, Constitution e decisões técnicas não se
-contradizem. O trade-off residual é a possibilidade de asset órfão quando o processo encerra entre
-Cloudinary e PostgreSQL; referências quebradas no catálogo continuam sendo evitadas. Recuperação
-automática persistente será considerada apenas se a operação real demonstrar necessidade.
+**Rationale**: protege o login sem Redis ou infraestrutura distribuída. A limitação é documentada
+como local à instância e pode evoluir somente se houver múltiplas instâncias.
+
+## 12. Erros
+
+**Decision**: usar catálogos `ApiError` com códigos globalmente únicos, uma `ApiException` com status
+e erro, `GlobalExceptionHandler` e `ApiErrorResponse`. Validação, `AuthenticationEntryPoint` e
+`AccessDeniedHandler` produzem o mesmo payload. Falhas inesperadas retornam `500` com código estável
+e sem detalhes internos.
+
+**Rationale**: um contrato único simplifica clientes e mantém mensagens seguras. Não há hierarquia
+de exceptions por camada nem RFC ProblemDetail.
+
+## 13. WhatsApp
+
+**Decision**: `InterestService` monta a URL `https://wa.me/{numero}?text={texto}` usando número e
+template configurados, codifica os parâmetros e inclui apenas identificação do produto. Não existe
+`WhatsappLinkGenerator` porque a lógica é pequena e pertence ao fluxo.
+
+**Rationale**: a V1 só redireciona; não usa WhatsApp Business API nem envia mensagens.
+
+## 14. Testes
+
+**Decision**: testes unitários cobrem regras puras com valor real; testes de integração com
+PostgreSQL Testcontainers cobrem migrations, repositories, transações, segurança, REST/HATEOAS e
+fluxos críticos. Cloudinary e Google são substituídos nos limites externos. Testcontainers existe
+somente no escopo de teste; a aplicação roda pela IDE/Maven.
+
+**Rationale**: os testes protegem comportamento e constraints reais sem fixar quantidade de classes
+ou camadas.
+
+## Decisões removidas do plano anterior
+
+- JWT assimétrico, par de chaves e `kid`;
+- refresh token JWT;
+- ports/adapters para repositories internos;
+- modelos de domínio e persistência duplicados;
+- mappers triviais;
+- `ClockProvider`, `IdGenerator` e `WhatsappLinkGenerator`;
+- uma classe de use case por operação;
+- referência circular entre `Reminder` e `ContactRecord`;
+- metas p95 sem requisito de negócio;
+- Spring Session, H2, ProblemDetail, mensageria, cache distribuído, CQRS e microsserviços.

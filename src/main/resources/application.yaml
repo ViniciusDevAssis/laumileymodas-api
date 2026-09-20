@@ -23,7 +23,6 @@ spring:
           google:
             client-id: ${LAUMILEY_OAUTH_CLIENT_ID}
             client-secret: ${LAUMILEY_OAUTH_CLIENT_SECRET}
-            redirect-uri: "{baseUrl}/api/v1/auth/google/callback"
             scope:
               - openid
               - profile
@@ -50,8 +49,8 @@ laumiley:
       refresh-audience: ${LAUMILEY_JWT_REFRESH_AUDIENCE:laumiley-refresh}
       access-token-ttl: ${LAUMILEY_JWT_ACCESS_TOKEN_TTL:15m}
       refresh-token-ttl: ${LAUMILEY_JWT_REFRESH_TOKEN_TTL:30d}
-      private-key: ${LAUMILEY_JWT_PRIVATE_KEY:}
-      public-key: ${LAUMILEY_JWT_PUBLIC_KEY:}
+      private-key: ${LAUMILEY_JWT_PRIVATE_KEY:test-private-key}
+      public-key: ${LAUMILEY_JWT_PUBLIC_KEY:test-public-key}
     csrf:
       cookie-name: XSRF-TOKEN
       header-name: X-XSRF-TOKEN

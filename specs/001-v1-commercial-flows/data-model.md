@@ -1,373 +1,328 @@
 # Data Model: Operação Comercial V1
 
-## Modeling Principles
+O modelo usa as próprias entidades JPA como modelo de negócio. Não existem cópias `DomainModel`,
+`JpaEntity`, mappers ou adapters de persistência. DTOs existem somente na borda HTTP.
 
-- PostgreSQL é a fonte de verdade do estado publicado; Cloudinary mantém somente o conteúdo dos
-  assets.
-- IDs são UUIDs gerados pela aplicação. Instantes são gravados em UTC com `timestamptz`.
-- O modelo não contém preço, estoque, tamanho, pedido, pagamento ou venda.
-- Exclusão de produto e categoria não faz parte da V1. Produto sai do catálogo por status.
-- Campos derivados, como lembrete vencido ou acionável, não são persistidos.
+## Conventions
 
-## Domain Boundaries
+- IDs: UUID.
+- Instantes: `timestamptz`, manipulados como `Instant`.
+- E-mails: valor original para exibição e valor normalizado em minúsculas para unicidade.
+- Textos obrigatórios: trimmed e não vazios.
+- Datas de criação/alteração: preenchidas pelo backend.
+- Enums persistidos como texto com checks no banco.
+- Exclusão física só é usada onde o produto a prevê; histórico comercial não é apagado na V1.
 
-### Identity and Customer
+## `Account`
 
-`Account` representa a identidade e o papel internos. `AccountExternalIdentity` vincula uma conta ao
-Google sem transferir ao provedor a autoridade sobre papéis. `RefreshToken` representa uma
-credencial renovável rotativa. `OAuthHandoff` representa somente a passagem temporária e de uso único
-entre o callback Google e o frontend. `Customer` representa a pessoa e seu contexto de relacionamento.
-A única conta `ADMIN` não precisa de um registro `Customer`.
-
-### Catalog
-
-`Product` é a raiz responsável por status e invariantes de suas `ProductImage`. `Category` organiza
-produtos, mas mantém ciclo de vida independente.
-
-### Interest
-
-`Interest` é um registro imutável de uma confirmação feita por cliente autenticado para produto
-ativo. Ele preserva o vínculo mesmo se o produto se tornar inativo depois.
-
-### CRM
-
-`ContactRecord` representa tanto o registro pendente de um atendimento solicitado quanto um contato
-já concluído. `Reminder` representa uma ação futura e calcula atraso e acionabilidade usando data,
-estado, origem, propósito e consentimento atual do cliente.
-
-## Persistent Models
-
-### `account`
+Credencial e autoridade local da aplicação.
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `email` | varchar(320) | Valor original normalizado para apresentação |
-| `normalized_email` | varchar(320) | Lowercase/trim, unique, required |
-| `password_hash` | varchar(255) | Hash com identificador do encoder; nullable para conta somente Google |
-| `role` | varchar(20) | `CLIENT` ou `ADMIN`, required |
-| `enabled` | boolean | Default `true`; desativação não ganha fluxo público na V1 |
-| `created_at` | timestamptz | Required |
-| `updated_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `email` | varchar(320) | obrigatório |
+| `normalizedEmail` | varchar(320) | obrigatório, unique |
+| `passwordHash` | varchar(255) | nullable; obrigatório para cadastro tradicional |
+| `role` | `CLIENT`, `ADMIN` | obrigatório e imutável |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
 
-Constraints:
+Rules:
 
-- `UNIQUE(normalized_email)`.
-- Check de papel limitado a `CLIENT` e `ADMIN`.
-- Índice único parcial para no máximo uma linha com `role = 'ADMIN'`.
-- Cadastro público sempre força `CLIENT`; papel recebido na entrada é ignorado/rejeitado.
+- cadastro público sempre define `CLIENT` e não recebe papel no request;
+- `ADMIN` só é criada/resolvida pelo fluxo Google administrativo cujo `sub` corresponde à
+  configuração do backend;
+- índice único parcial permite no máximo uma linha `ADMIN`;
+- Account Google pode não possuir senha local;
+- coincidência de e-mail nunca cria vínculo de identidade externo.
 
-### `account_external_identity`
+## `AccountExternalIdentity`
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `account_id` | UUID | FK para `account`, required |
-| `provider` | varchar(30) | `GOOGLE` na V1, required |
-| `subject` | varchar(255) | Valor `sub` validado no provedor, required |
-| `email_at_link` | varchar(320) | E-mail verificado observado no vínculo, required |
-| `created_at` | timestamptz | Required |
-| `last_login_at` | timestamptz | Required |
-
-`UNIQUE(provider, subject)` impede que a mesma identidade autentique mais de uma conta. O papel nunca
-é derivado do e-mail: `ADMIN` só pode ser criado/autenticado quando `subject` e e-mail verificado
-correspondem à configuração operacional autorizada.
-
-Para clientes, `email_at_link` é evidência de auditoria do momento do vínculo, não uma chave de
-identidade. Um `subject` inédito nunca é associado automaticamente a uma `Account` existente pela
-coincidência desse e-mail. Se o e-mail já estiver ocupado sem vínculo com o `subject`, o fluxo é
-rejeitado; vinculação manual não pertence à V1.
-
-### `refresh_token`
+Vínculo genérico com um provedor autenticado.
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key e identificador interno |
-| `account_id` | UUID | FK para `account`, required |
-| `family_id` | UUID | Identifica a cadeia de rotações, required |
-| `jti_hash` | varchar(255) | Hash do `jti` do refresh JWT, unique, required; token bruto nunca persistido |
-| `expires_at` | timestamptz | Required |
-| `consumed_at` | timestamptz | Preenchido no primeiro refresh; nullable |
-| `revoked_at` | timestamptz | Preenchido no logout, reuso ou revogação operacional; nullable |
-| `replaced_by_id` | UUID | FK nullable para o token sucessor |
-| `created_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `accountId` | UUID | FK Account, obrigatório |
+| `provider` | varchar(30) | `GOOGLE` na V1 |
+| `subject` | varchar(255) | `sub` do provedor, obrigatório |
+| `createdAt` | instant | obrigatório |
 
-Um token é utilizável somente se não expirou, não foi consumido nem revogado e a conta está ativa.
-A rotação consome o atual e cria o sucessor na mesma transação. Reuso de token consumido revoga todos
-os tokens ainda ativos da família.
+Constraints: unique `(provider, subject)` e unique `(account_id, provider)`.
 
-### `oauth_handoff`
+## `RefreshToken`
+
+Estado servidor do refresh token opaco.
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key interno |
-| `handle_hash` | varchar(255) | Hash do valor opaco enviado somente em cookie, unique, required |
-| `purpose` | varchar(40) | `EXISTING_ACCOUNT_LOGIN` ou `CLIENT_REGISTRATION`, required |
-| `account_id` | UUID | FK nullable; required para login de conta existente |
-| `provider` | varchar(30) | `GOOGLE` na V1, required |
-| `provider_subject` | varchar(255) | `sub` validado, required |
-| `verified_email` | varchar(320) | E-mail validado no provedor, required |
-| `given_name` | varchar(100) | Nullable; sugestão para concluir cadastro |
-| `family_name` | varchar(100) | Nullable; sugestão para concluir cadastro |
-| `expires_at` | timestamptz | Required; no máximo 10 minutos após criação |
-| `consumed_at` | timestamptz | Preenchido atomicamente no uso; nullable |
-| `created_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `accountId` | UUID | FK Account, obrigatório |
+| `tokenHash` | char(64) | SHA-256 em hexadecimal, unique |
+| `familyId` | UUID | obrigatório |
+| `expiresAt` | instant | obrigatório |
+| `consumedAt` | instant | nullable |
+| `revokedAt` | instant | nullable |
+| `createdAt` | instant | obrigatório |
 
-O valor bruto nunca é persistido, retornado em JSON ou colocado na URL. O handoff não concede acesso
-a recursos e só pode ser consumido pelo endpoint compatível com seu `purpose`, acompanhado da
-proteção CSRF. Expiração ou consumo impede reutilização.
+Derived state:
 
-`verified_email` permite preencher o novo cadastro ou detectar conflito com uma conta existente; ele
-não autoriza a criação de handoff para essa conta nem a criação de `AccountExternalIdentity`.
+- active: não consumido, não revogado e ainda não expirado;
+- consumed: `consumedAt != null`;
+- revoked: `revokedAt != null`;
+- expired: `expiresAt <= now`.
 
-### `customer`
+Rotação consome o atual e cria outro na mesma família. Reuso de um token consumido revoga todos os
+tokens ainda ativos da família.
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `account_id` | UUID | FK unique para `account`, required e papel `CLIENT` validado pela aplicação |
-| `first_name` | varchar(100) | Required, trimmed |
-| `last_name` | varchar(100) | Required, trimmed |
-| `whatsapp_phone` | varchar(20) | Required, normalizado para E.164 |
-| `proactive_contact_authorized` | boolean | Required, default `false`; nunca concedido por cadastro |
-| `contact_consent_changed_at` | timestamptz | Instante da última decisão explícita; nullable até a primeira ação |
-| `created_at` | timestamptz | Required |
-| `updated_at` | timestamptz | Required |
+## `OAuthHandoff`
 
-O atendimento solicitado pelo cliente não depende de `proactive_contact_authorized`. A flag é
-consultada somente para novos contatos comerciais iniciados pela loja.
-
-### `category`
+Troca temporária e de uso único entre callback Google e frontend.
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `name` | varchar(120) | Required, trimmed |
-| `normalized_name` | varchar(120) | Unique, required |
-| `created_at` | timestamptz | Required |
-| `updated_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `handleHash` | char(64) | hash do valor opaco do cookie, unique |
+| `intent` | `CLIENT`, `ADMIN` | obrigatório |
+| `accountId` | UUID | FK Account, nullable para novo cliente |
+| `googleSubject` | varchar(255) | obrigatório para novo vínculo |
+| `verifiedEmail` | varchar(320) | obrigatório |
+| `givenName` | varchar(120) | nullable |
+| `familyName` | varchar(120) | nullable |
+| `expiresAt` | instant | obrigatório e curto |
+| `consumedAt` | instant | nullable |
+| `createdAt` | instant | obrigatório |
 
-Não há exclusão na V1. Renomear deve manter a unicidade após normalização.
+O valor bruto existe somente no cookie `HttpOnly`. Consumo exige handle válido, não expirado,
+CSRF e lock da linha. Registros expirados podem ser removidos por manutenção posterior simples, sem
+job obrigatório na V1.
 
-### `product`
+## `Customer`
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `category_id` | UUID | FK para `category`, required, `ON DELETE RESTRICT` |
-| `name` | varchar(160) | Required, trimmed |
-| `description` | text | Required, conteúdo não vazio, limite de aplicação |
-| `status` | varchar(20) | `ACTIVE` ou `INACTIVE`, required |
-| `created_at` | timestamptz | Required |
-| `updated_at` | timestamptz | Required |
-
-Um produto só pode ser persistido ou permanecer `ACTIVE` com uma ou mais imagens válidas e
-exatamente uma principal. Essas regras entre linhas ficam no domínio e no caso de uso.
-
-### `product_image`
+Dados comerciais do cliente.
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `product_id` | UUID | FK para `product`, required, `ON DELETE RESTRICT` |
-| `external_id` | varchar(255) | Identificador do asset no Cloudinary, unique, required |
-| `secure_url` | varchar(2048) | URL HTTPS retornada pelo provedor, required |
-| `is_primary` | boolean | Required, default `false` |
-| `display_order` | integer | Required, non-negative |
-| `created_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK e código público do cliente |
+| `accountId` | UUID | FK Account, unique, obrigatório |
+| `firstName` | varchar(120) | obrigatório |
+| `lastName` | varchar(120) | obrigatório |
+| `whatsappPhone` | varchar(20) | E.164, obrigatório |
+| `proactiveContactAuthorized` | boolean | obrigatório, default false |
+| `consentGrantedAt` | instant | nullable |
+| `consentRevokedAt` | instant | nullable |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
 
-Um índice único parcial em `product_id WHERE is_primary = true` garante no máximo uma principal. O
-caso de uso garante pelo menos uma. Cada `ProductImage` mantém seu `Product`, URL, `externalId`, flag
-principal e ordem. Consultas de produto entregam ao frontend as URLs ordenadas; o identificador
-externo permanece interno e operações administrativas usam o ID local da imagem.
+Rules:
 
-### `interest`
+- consentimento começa `false` e depende de ação afirmativa;
+- concessão e revogação são idempotentes;
+- revogação não altera autenticação, histórico, interesses ou lembretes de atendimento solicitado.
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `customer_id` | UUID | FK para `customer`, required |
-| `product_id` | UUID | FK para `product`, required |
-| `idempotency_key` | varchar(128) | Required, valor opaco validado |
-| `created_at` | timestamptz | Required |
-
-`UNIQUE(customer_id, idempotency_key)` protege uma confirmação contra repetição. Ao repetir a chave,
-o caso de uso compara `product_id`: se for igual, devolve o registro existente; se for diferente,
-retorna conflito. Não há unicidade em cliente/produto, pois um novo interesse futuro é permitido.
-
-### `contact_record`
+## `Category`
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `customer_id` | UUID | FK para `customer`, required |
-| `interest_id` | UUID | FK unique nullable; preenchida no registro automático |
-| `reminder_id` | UUID | FK unique nullable; preenchida no registro automático |
-| `status` | varchar(20) | `PENDING` ou `COMPLETED`, required |
-| `occurred_at` | timestamptz | Data efetiva da interação; nullable enquanto pendente |
-| `channel` | varchar(80) | Texto controlado/validado, required |
-| `description` | varchar(2000) | Nullable enquanto pendente; required e trimmed ao concluir |
-| `completed_at` | timestamptz | Required somente em `COMPLETED` |
-| `created_at` | timestamptz | Momento do registro, required |
-| `updated_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `name` | varchar(120) | obrigatório |
+| `normalizedName` | varchar(120) | unique, obrigatório |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
 
-Registros manuais nascem `COMPLETED` com data, canal e descrição. O fluxo de interesse cria um
-registro `PENDING`, canal `WHATSAPP`, sem afirmar que houve conversa. Ao concluir, a administradora
-informa os dados finais e o registro passa ao histórico. Listagens distinguem status; concluídos são
-ordenados por `occurred_at DESC, id DESC`, e pendentes por `created_at DESC, id DESC`. Edição posterior,
-reabertura e exclusão não fazem parte da V1.
+A V1 permite criar e renomear. Exclusão não foi especificada.
 
-### `reminder`
+## `Product`
 
 | Field | Type | Rules |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `customer_id` | UUID | FK para `customer`, required |
-| `interest_id` | UUID | FK unique required; todo lembrete nasce de um interesse confirmado |
-| `description` | varchar(1000) | Required, trimmed |
-| `due_at` | timestamptz | Required |
-| `status` | varchar(20) | `PENDING` ou `COMPLETED`, required |
-| `completed_at` | timestamptz | Required somente em `COMPLETED` |
-| `created_at` | timestamptz | Required |
-| `updated_at` | timestamptz | Required |
+|---|---|---|
+| `id` | UUID | PK |
+| `categoryId` | UUID | FK Category, obrigatório |
+| `name` | varchar(200) | obrigatório |
+| `description` | varchar(2000) | obrigatório |
+| `status` | `ACTIVE`, `INACTIVE` | obrigatório |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
 
-Derivations:
+Rules:
 
-- `overdue = status == PENDING && due_at < now`.
-- `actionable = status == PENDING`.
-- Revogar consentimento não altera `status` nem `actionable`, pois todo lembrete acompanha uma
-  solicitação iniciada pelo cliente.
-- Todo lembrete nasce pendente com `due_at` igual à data do interesse e só é concluído junto com seu
-  `ContactRecord`. Não existe criação manual nem conclusão independente na V1.
+- produto ativo deve possuir ao menos uma imagem e exatamente uma principal;
+- apenas ativo aparece no catálogo e aceita novo interesse;
+- preço, estoque, tamanho e disponibilidade não pertencem ao modelo.
+
+## `ProductImage`
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | PK |
+| `productId` | UUID | FK Product, obrigatório |
+| `url` | varchar(2048) | obrigatório |
+| `externalId` | varchar(255) | obrigatório, unique |
+| `primary` | boolean | obrigatório |
+| `displayOrder` | integer | >= 0, obrigatório |
+| `createdAt` | instant | obrigatório |
+
+Constraints: unique `(product_id, display_order)` e índice único parcial em `product_id` quando
+`primary = true`. O service garante ao menos uma principal antes de ativar/publicar.
+
+## `Interest`
+
+Confirmação do cliente para seguir ao WhatsApp.
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | PK |
+| `customerId` | UUID | FK Customer, obrigatório |
+| `productId` | UUID | FK Product, obrigatório |
+| `idempotencyKey` | varchar(100) | obrigatório |
+| `createdAt` | instant | data do interesse, obrigatório |
+
+Constraint: unique `(customer_id, idempotency_key)`. Repetição com mesma chave e mesmo produto
+retorna o resultado existente; mesma chave para produto diferente retorna conflito.
+
+## `Reminder`
+
+Acompanhamento criado exclusivamente pelo interesse.
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | PK |
+| `interestId` | UUID | FK Interest, obrigatório, unique |
+| `description` | varchar(1000) | obrigatório |
+| `dueAt` | instant | obrigatório; inicialmente data do interesse |
+| `status` | `PENDING`, `COMPLETED` | obrigatório |
+| `completedAt` | instant | nullable; obrigatório quando concluído |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
+
+Rules:
+
+- sempre nasce `PENDING` junto do Interest e do ContactRecord;
+- `overdue = status == PENDING && dueAt < now`;
+- não existe criação manual, edição, exclusão ou conclusão independente;
+- só muda para `COMPLETED` na conclusão do ContactRecord do mesmo `interestId`;
+- canal, cliente/código e produto exigidos pela resposta são obtidos pelo Interest relacionado.
+
+## `ContactRecord`
+
+Contato comercial manual concluído ou acompanhamento automático pendente.
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | PK |
+| `customerId` | UUID | FK Customer, obrigatório |
+| `interestId` | UUID | FK Interest, nullable, unique quando presente |
+| `status` | `PENDING`, `COMPLETED` | obrigatório |
+| `occurredAt` | instant | nullable enquanto pendente; obrigatório ao concluir |
+| `channel` | varchar(40) | obrigatório; automático nasce `WHATSAPP` |
+| `description` | varchar(2000) | nullable enquanto pendente; obrigatório ao concluir |
+| `completedAt` | instant | nullable; obrigatório quando concluído |
+| `createdAt` | instant | obrigatório |
+| `updatedAt` | instant | obrigatório |
+
+Rules:
+
+- registro manual não tem Interest e nasce `COMPLETED`;
+- registro automático tem Interest e nasce `PENDING`, sem afirmar que houve conversa;
+- concluir registro automático exige `occurredAt`, canal e descrição, muda o ContactRecord e o
+  Reminder do mesmo Interest para `COMPLETED` na mesma transação;
+- não há reabertura, edição posterior ou exclusão na V1.
 
 ## Relationships
 
 ```text
 Account 1 ─── 0..* AccountExternalIdentity
 Account 1 ─── 0..* RefreshToken
-Account 1 ─── 0..* OAuthHandoff (somente login de conta existente)
 Account 1 ─── 0..1 Customer
+Account 1 ─── 0..* OAuthHandoff
 Category 1 ─── * Product
 Product 1 ─── 1..* ProductImage
 Customer 1 ─── * Interest * ─── 1 Product
 Customer 1 ─── * ContactRecord
-Customer 1 ─── * Reminder
 Interest 1 ─── 1 Reminder
-Interest 1 ─── 1 ContactRecord (acompanhamento automático)
-Reminder 1 ─── 1 ContactRecord
+Interest 1 ─── 1 ContactRecord (automático)
 ```
+
+`Reminder` e `ContactRecord` automático são relacionados pelo mesmo `Interest`; não existe FK
+entre eles.
 
 ## State Transitions
 
 ### Product
 
 ```text
-INACTIVE ── activate (images valid + exactly one primary) ──> ACTIVE
-ACTIVE   ── deactivate ─────────────────────────────────────> INACTIVE
+INACTIVE -- activate with valid images and one primary --> ACTIVE
+ACTIVE   -- deactivate --------------------------------> INACTIVE
 ```
-
-Produto ativo pode receber alterações desde que a transação preserve as invariantes. Produto
-inativo não aparece no catálogo e não aceita novo interesse.
 
 ### Contact consent
 
 ```text
-NOT_AUTHORIZED (default) ── affirmative opt-in ──> AUTHORIZED
-AUTHORIZED ── revoke ───────────────────────────> NOT_AUTHORIZED
-NOT_AUTHORIZED ── revoke again ─────────────────> NOT_AUTHORIZED (idempotent)
-AUTHORIZED ── grant again ──────────────────────> AUTHORIZED (idempotent)
+NOT_AUTHORIZED -- affirmative grant --> AUTHORIZED
+AUTHORIZED     -- revoke -----------> NOT_AUTHORIZED
 ```
 
-### Reminder
+Repetir o estado desejado é idempotente.
+
+### ContactRecord and Reminder
 
 ```text
-PENDING ── complete ──> COMPLETED
+Interest confirmed
+  -> ContactRecord PENDING + Reminder PENDING
+  -> admin completes ContactRecord
+  -> ContactRecord COMPLETED + Reminder COMPLETED (same transaction)
 ```
 
-`OVERDUE` é uma condição derivada, não um estado persistido. O lembrete só muda para `COMPLETED` na
-transição conjunta do `ContactRecord`. Criação manual, conclusão direta, reabertura, edição e exclusão
-não pertencem à V1.
-
-### ContactRecord
-
-```text
-PENDING ── complete with occurredAt + description ──> COMPLETED
-```
-
-Contato manual nasce `COMPLETED`. Um contato automático nasce `PENDING`, vinculado ao interesse e
-ao lembrete, e sua conclusão também conclui esse lembrete. O estado pendente não é evidência de
-conversa realizada.
+`OVERDUE` é derivado e não altera `PENDING`.
 
 ### RefreshToken
 
 ```text
-ACTIVE ── refresh ──> CONSUMED + successor ACTIVE
-ACTIVE ── logout/administrative revoke ──> REVOKED
-CONSUMED ── reuse detected ──> family REVOKED
-ACTIVE ── expires ──> EXPIRED (derived)
+ACTIVE -- refresh --> CONSUMED + new ACTIVE in same family
+ACTIVE -- logout --> REVOKED
+CONSUMED -- reuse --> active family members REVOKED
+ACTIVE -- time passes --> EXPIRED (derived)
 ```
 
 ### OAuthHandoff
 
 ```text
-ACTIVE ── exchange/complete registration ──> CONSUMED
-ACTIVE ── timeout ─────────────────────────> EXPIRED (derived)
+ACTIVE -- exchange/finish registration --> CONSUMED
+ACTIVE -- time passes ------------------> EXPIRED (derived)
 ```
-
-Não existe transição de handoff para sessão ou autenticação de recurso. Somente seu consumo bem
-sucedido permite emitir os tokens próprios da aplicação.
-
-### Interest
-
-Interesse não muda de estado nem é removido na V1. A repetição idempotente recupera o mesmo registro.
 
 ## Transaction Boundaries
 
-- Conta e cliente são criados atomicamente.
-- Vínculo Google e eventual criação de `Account`/`Customer` são atômicos; a constraint da
-  administradora permanece a autoridade final contra concorrência.
-- Criação do handoff ocorre somente após validação completa do callback Google. Seu consumo usa lock,
-  marca `consumed_at` e emite tokens ou cria `Account`/`Customer` na mesma transação lógica, impedindo
-  reutilização concorrente.
-- Rotação consome o refresh token atual e cria seu sucessor em uma única transação com lock; detecção
-  de reuso revoga a família atomicamente.
-- Consentimento é alterado em uma transação curta e não muda a acionabilidade dos lembretes de
-  atendimento iniciados pelo cliente.
-- Produto e referências de todas as imagens da criação são persistidos juntos.
-- Troca de principal remove e define a flag na mesma transação, com lock no produto.
-- Interesse, lembrete e `ContactRecord` pendente são persistidos na mesma transação; as
-  constraints de idempotência e unicidade por interesse são a autoridade final contra concorrência.
-- Conclusão de `ContactRecord` automático preenche seus dados finais e altera contato e lembrete para
-  `COMPLETED`, com os dois `completed_at`, na mesma transação.
-- Não existe transação independente para criar ou concluir lembrete.
+- Account tradicional e Customer são criados juntos.
+- Vínculo Google, Account/Customer e consumo de handoff são atômicos conforme o fluxo.
+- Rotação de refresh usa lock e cria sucessor na mesma transação.
+- Product e referências de imagens são persistidos preservando suas invariantes; operação externa
+  Cloudinary usa compensação simples descrita no plan.
+- Interest, Reminder e ContactRecord PENDING são inseridos na mesma transação.
+- Conclusão automática altera ContactRecord e Reminder do mesmo Interest na mesma transação.
+- Não existe transação de criação ou conclusão isolada de Reminder.
 
 ## Indexes
 
-- `account(normalized_email)` unique.
-- `account(role) WHERE role = 'ADMIN'` unique partial.
-- `account_external_identity(provider, subject)` unique e índice por `account_id`.
-- `refresh_token(jti_hash)` unique; índices por `account_id`, `family_id` e `expires_at`.
-- `oauth_handoff(handle_hash)` unique; índices por `expires_at` e `account_id` quando não nulo.
-- `category(normalized_name)` unique.
-- `product(status, created_at DESC)` para catálogo.
-- `product(category_id)` para gestão.
-- `product_image(product_id, display_order)` e índice parcial da principal.
-- `product_image(external_id)` unique.
-- `interest(customer_id, created_at DESC)` e unique de idempotência.
-- `contact_record(interest_id)` e `contact_record(reminder_id)` unique quando não nulos;
-  `contact_record(customer_id, status, occurred_at DESC)`.
-- `reminder(status, due_at)` e `reminder(customer_id, due_at DESC)`.
-- `reminder(interest_id)` unique quando não nulo.
+- `account(normalized_email)` unique e unique parcial para papel ADMIN;
+- `account_external_identity(provider, subject)` unique;
+- `refresh_token(token_hash)` unique, índices em `family_id`, `account_id`, `expires_at`;
+- `oauth_handoff(handle_hash)` unique e índice em `expires_at`;
+- `customer(whatsapp_phone)` e campos normalizados usados na pesquisa;
+- `category(normalized_name)` unique;
+- `product(status, created_at desc)` e `product(category_id)`;
+- `product_image(product_id, display_order)` e principal parcial;
+- `interest(customer_id, created_at desc)` e unique idempotente;
+- `reminder(interest_id)` unique e `(status, due_at)`;
+- `contact_record(interest_id)` unique quando presente e
+  `(customer_id, status, occurred_at desc)`.
 
 ## Migration Plan
 
-1. `V1__create_identity_customers_and_tokens.sql`
-2. `V2__create_catalog.sql`
-3. `V3__create_interests_crm_and_follow_up_links.sql`
-4. `V4__create_operational_indexes.sql`
+1. `V1__create_catalog.sql`
+2. `V2__create_accounts_and_customers.sql`
+3. `V3__create_interests_and_crm.sql`
 
-`V1` inclui identidades externas, refresh tokens e handoffs OAuth temporários; `V4` inclui os índices
-de expiração e busca operacional desses registros.
-
-Após serem aplicadas fora do ambiente local descartável, migrations não são editadas. Qualquer
-ajuste recebe uma nova versão.
+Cada migration inclui suas constraints e índices diretamente relacionados. Não existe migration
+separada apenas para criar estrutura cerimonial. Depois de aplicada em ambiente compartilhado, uma
+migration não é editada; mudanças recebem nova versão.

@@ -3,6 +3,9 @@ package com.viniciusdevassis.laumileymodas.infrastructure.security.oauth
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest
 import jakarta.servlet.http.*
 import org.springframework.http.ResponseCookie
@@ -17,6 +20,9 @@ import javax.crypto.spec.SecretKeySpec
 
 @Component
 class OAuthAuthorizationRequestCookieRepository(@Value("\${laumiley.security.oauth-handoff.encryption-key}") secret: String) : AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
+	companion object {
+		const val INTENT_ATTRIBUTE = "laumiley_oauth_intent"
+	}
 	private val key = SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(secret.toByteArray()), "AES")
 	private val cookieName = "LAUMILEY_OAUTH_REQUEST"
 	fun seal(value: String): String {
@@ -28,7 +34,11 @@ class OAuthAuthorizationRequestCookieRepository(@Value("\${laumiley.security.oau
 		cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, bytes.copyOfRange(0, 12))); return String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)))
 	}
 
-	override fun loadAuthorizationRequest(request: HttpServletRequest): OAuth2AuthorizationRequest? = request.cookies?.firstOrNull { it.name == cookieName }?.value?.let { deserialize(open(it)) }
+	override fun loadAuthorizationRequest(request: HttpServletRequest): OAuth2AuthorizationRequest? = request.cookies
+		?.firstOrNull { it.name == cookieName }
+		?.value
+		?.let { deserialize(open(it)) }
+		?.also { request.setAttribute(INTENT_ATTRIBUTE, it.attributes[INTENT_ATTRIBUTE]) }
 
 	override fun saveAuthorizationRequest(authorizationRequest: OAuth2AuthorizationRequest?, request: HttpServletRequest, response: HttpServletResponse) {
 		val cookie = if (authorizationRequest == null) ResponseCookie.from(cookieName, "").maxAge(0) else ResponseCookie.from(cookieName, seal(serialize(authorizationRequest))).maxAge(java.time.Duration.ofMinutes(10))
@@ -45,5 +55,33 @@ class OAuthAuthorizationRequestCookieRepository(@Value("\${laumiley.security.oau
 	private fun deserialize(value: String): OAuth2AuthorizationRequest {
 		val bytes = Base64.getUrlDecoder().decode(value)
 		return ObjectInputStream(ByteArrayInputStream(bytes)).use { it.readObject() as OAuth2AuthorizationRequest }
+	}
+}
+
+@Component
+class GoogleIntentAuthorizationRequestResolver(
+	clientRegistrations: ClientRegistrationRepository,
+) : OAuth2AuthorizationRequestResolver {
+	private val delegate = DefaultOAuth2AuthorizationRequestResolver(clientRegistrations, "/oauth2/authorization")
+
+	override fun resolve(request: HttpServletRequest): OAuth2AuthorizationRequest? =
+		intentFor(request)?.let { withProtectedIntent(delegate.resolve(request, "google"), it) }
+
+	override fun resolve(request: HttpServletRequest, clientRegistrationId: String): OAuth2AuthorizationRequest? =
+		if (clientRegistrationId == "google") intentFor(request)?.let { withProtectedIntent(delegate.resolve(request, clientRegistrationId), it) } else null
+
+	private fun intentFor(request: HttpServletRequest): String? = when (
+		request.servletPath.ifBlank { request.requestURI.removePrefix(request.contextPath) }
+	) {
+		"/auth/google/client" -> "CLIENT"
+		"/auth/google/admin" -> "ADMIN"
+		else -> null
+	}
+
+	private fun withProtectedIntent(request: OAuth2AuthorizationRequest?, intent: String): OAuth2AuthorizationRequest? {
+		if (request == null) return null
+		return OAuth2AuthorizationRequest.from(request)
+			.attributes { it[OAuthAuthorizationRequestCookieRepository.INTENT_ATTRIBUTE] = intent }
+			.build()
 	}
 }

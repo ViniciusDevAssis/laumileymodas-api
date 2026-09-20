@@ -1,13 +1,33 @@
 package com.viniciusdevassis.laumileymodas.presentation.auth
 
+import com.viniciusdevassis.laumileymodas.infrastructure.security.oauth.GoogleIntentAuthorizationRequestResolver
 import com.viniciusdevassis.laumileymodas.infrastructure.security.oauth.OAuthAuthorizationRequestCookieRepository
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.http.*
-import org.springframework.web.bind.annotation.*
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+import java.net.URI
 
-@RestController @RequestMapping("/auth/google")
-class GoogleAuthController(private val state: OAuthAuthorizationRequestCookieRepository) {
-	@GetMapping("/client") fun client(response:HttpServletResponse)=start("CLIENT",response)
-	@GetMapping("/admin") fun admin(response:HttpServletResponse)=start("ADMIN",response)
-	private fun start(intent:String,response:HttpServletResponse):ResponseEntity<Void>{ response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from("LAUMILEY_OAUTH_INTENT",state.seal(intent)).httpOnly(true).sameSite("Lax").path("/api/v1/auth/google").maxAge(java.time.Duration.ofMinutes(10)).build().toString()); return ResponseEntity.status(HttpStatus.FOUND).location(java.net.URI.create("/api/v1/oauth2/authorization/google")).build() }
+@RestController
+@RequestMapping("/auth/google")
+class GoogleAuthController(
+	private val resolver: GoogleIntentAuthorizationRequestResolver,
+	private val authorizationRequests: OAuthAuthorizationRequestCookieRepository,
+) {
+	@GetMapping("/client")
+	fun client(request: HttpServletRequest, response: HttpServletResponse) = start(request, response)
+
+	@GetMapping("/admin")
+	fun admin(request: HttpServletRequest, response: HttpServletResponse) = start(request, response)
+
+	private fun start(request: HttpServletRequest, response: HttpServletResponse): ResponseEntity<Void> {
+		val authorizationRequest = requireNotNull(resolver.resolve(request))
+		authorizationRequests.saveAuthorizationRequest(authorizationRequest, request, response)
+		return ResponseEntity.status(HttpStatus.FOUND)
+			.location(URI.create(authorizationRequest.authorizationRequestUri))
+			.build()
+	}
 }
