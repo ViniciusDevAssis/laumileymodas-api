@@ -7,13 +7,14 @@
 ## Summary
 
 Implementar a V1 como um monólito Spring Boot simples, com API REST e HATEOAS. O fluxo padrão será
-`Controller -> Service -> Spring Data Repository -> entidade JPA`. As entidades de negócio também
-serão entidades JPA; não haverá ports internos, adapters de persistência, modelos duplicados,
-mappers triviais nem uma classe por operação.
+`Controller -> Service -> Spring Data Repository -> entidade JPA`. Os pacotes `presentation`,
+`application`, `domain` e `infrastructure` organizam responsabilidades; eles não representam Clean
+Architecture. As entidades de negócio também serão entidades JPA; não haverá ports internos,
+adapters de persistência, modelos duplicados, mappers triviais nem uma classe por operação.
 
 Services coesos cuidam de transações e regras do próprio contexto. Controllers traduzem HTTP e
 adicionam links. Spring Security centraliza autenticação e autorização. A única abstração externa
-obrigatória é `MediaStorage`, implementada pelo adapter Cloudinary.
+obrigatória é `MediaStorage`, implementada pela integração Cloudinary.
 
 ## Technical Context
 
@@ -148,7 +149,7 @@ classes.
 - repositories Spring Data são usados diretamente;
 - regras simples podem permanecer no service; invariantes do próprio objeto ficam na entidade;
 - `Clock` é injetado diretamente em services com regras temporais;
-- `MediaStorage` é a única porta externa exigida neste plano.
+- `MediaStorage` é a única interface externa exigida neste plano.
 
 ### Domain
 
@@ -403,7 +404,7 @@ evitando construir toda a infraestrutura antecipadamente.
 
 | Abstraction | Why it exists now | Simpler option rejected because |
 |---|---|---|
-| `MediaStorage` | Isola o Cloudinary conforme a Constitution. | SDK no service contaminaria aplicação e testes. |
+| `MediaStorage` | Isola o Cloudinary conforme a Constitution. | SDK no service misturaria regra da aplicação com detalhe de provedor externo. |
 | `OAuthHandoff` | Garante troca única sem tokens na URL. | Cookie autocontido não permite invalidar reuso confiavelmente. |
 | `ApiError`/`ApiException` | Mantém códigos estáveis e contrato único. | Exceptions ad hoc quebrariam consistência. |
 

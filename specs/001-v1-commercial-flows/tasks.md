@@ -8,8 +8,10 @@ persistência, service, HTTP/HATEOAS e testes que ela realmente exige. A fundaç
 preocupações transversais que bloqueiam todas as entregas.
 
 **Complexity rule**: seguir `Controller -> Service -> Spring Data Repository -> entidade JPA`.
-Não criar ports internos, adapters de repository, modelos duplicados, mappers triviais ou uma
-classe por operação. A única porta externa prevista é `MediaStorage`.
+Os pacotes `presentation`, `application`, `domain` e `infrastructure` são organização de
+responsabilidades, não Clean Architecture. Não criar ports internos, adapters de repository,
+modelos duplicados, mappers triviais ou uma classe por operação. A única interface externa prevista
+é `MediaStorage`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -102,7 +104,7 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T030 [US2] Criar interest, reminder e contact_record com uniques por interest_id em `src/main/resources/db/migration/V3__create_interests_and_crm.sql`
 - [ ] T031 [P] [US2] Implementar entidades JPA de identidade e cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Account.kt`, `AccountExternalIdentity.kt`, `Customer.kt`, `RefreshToken.kt` e `OAuthHandoff.kt`
 - [ ] T032 [P] [US2] Implementar entidades JPA `Interest`, `Reminder` e `ContactRecord` e suas transições em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Interest.kt`, `Reminder.kt` e `ContactRecord.kt`
-- [ ] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e GoogleIntent em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/DomainEnums.kt`
+- [ ] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/DomainEnums.kt`
 - [ ] T034 [US2] Criar repositories Spring Data para contas, clientes, tokens e handoffs em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/AccountRepository.kt` e `CustomerRepository.kt`
 - [ ] T035 [US2] Criar repositories Spring Data para Interest, Reminder e ContactRecord em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/InterestRepository.kt` e `CrmRepositories.kt`
 - [ ] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/JwtService.kt`
@@ -114,7 +116,7 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T042 [US2] Configurar cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Resource Server HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
 - [ ] T043 [P] [US2] Definir DTOs de cadastro, login, tokens e Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/AuthDtos.kt` e `CustomerDtos.kt`
 - [ ] T044 [US2] Implementar cadastro, login, refresh, logout e CSRF em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt` e `CustomerController.kt`
-- [ ] T045 [US2] Remover controller/resolver/repository de authorization request customizados e manter somente exchange e conclusão de cadastro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt`
+- [ ] T045 [US2] Manter o OAuth no fluxo nativo do Spring Security, sem controller/resolver/repository de authorization request customizados, expondo somente exchange e conclusão de cadastro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt`
 - [ ] T046 [US2] Implementar confirmação idempotente, URL WhatsApp e criação transacional do trio em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/InterestService.kt`
 - [ ] T047 [P] [US2] Adicionar DTO HAL do interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CustomerDtos.kt`
 - [ ] T048 [US2] Implementar `POST /products/{productId}/interests` com Location e links de produto/WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/InterestController.kt`

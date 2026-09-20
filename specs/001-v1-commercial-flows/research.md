@@ -7,8 +7,8 @@ protege uma regra, um limite de segurança, uma integração externa ou reutiliz
 ## 1. Organização pragmática
 
 **Decision**: usar o fluxo predominante `Controller -> Service -> Spring Data Repository ->
-entidade JPA`, organizado pelas responsabilidades `presentation`, `application`, `domain` e
-`infrastructure`.
+entidade JPA`. Os nomes `presentation`, `application`, `domain` e `infrastructure` são pacotes de
+organização e responsabilidade, não uma adoção de Clean Architecture.
 
 **Rationale**: as quatro responsabilidades continuam claras sem duplicar o mesmo conceito em
 modelos diferentes. Services coesos por contexto concentram transações e orquestração; entidades
@@ -17,7 +17,7 @@ HTTP e HATEOAS.
 
 **Alternatives considered**:
 
-- uma classe de caso de uso por operação: rejeitada por fragmentar fluxos simples;
+- uma classe de use case ou comando por operação: rejeitada por fragmentar fluxos simples;
 - ports e adapters para cada repository: rejeitados porque existe uma única persistência interna;
 - entidades de domínio separadas de entidades JPA: rejeitadas porque os modelos seriam equivalentes;
 - arquitetura hexagonal completa ou Clean Architecture estrita: rejeitada por não haver necessidade
@@ -51,7 +51,8 @@ infrastructure/
 ```
 
 **Rationale**: esses services correspondem a contextos funcionais reais. Novos services ou helpers
-só serão criados quando uma classe deixar de ser coesa ou houver reutilização real.
+só serão criados quando uma classe deixar de ser coesa ou houver reutilização real. A pasta onde
+uma classe vive comunica responsabilidade; ela não cria uma barreira arquitetural artificial.
 
 **Alternatives considered**: packages por camada com subestrutura completa por agregado e packages
 por feature com cópias das quatro camadas; ambos foram rejeitados na V1 por multiplicarem arquivos
@@ -259,7 +260,7 @@ ou camadas.
 - modelos de domínio e persistência duplicados;
 - mappers triviais;
 - `ClockProvider`, `IdGenerator` e `WhatsappLinkGenerator`;
-- uma classe de use case por operação;
+- uma classe de use case ou comando por operação;
 - referência circular entre `Reminder` e `ContactRecord`;
 - metas p95 sem requisito de negócio;
 - Spring Session, H2, ProblemDetail, mensageria, cache distribuído, CQRS e microsserviços.

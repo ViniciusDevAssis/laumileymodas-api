@@ -31,6 +31,5 @@
 
 ## Notes
 
-- 13/16 itens estão aprovados.
-- Permanecem pendentes para `$speckit-clarify`: dados mínimos da conta de cliente, disponibilização
-  da primeira conta administradora e critérios de visibilidade dos produtos no catálogo.
+- Checklist revisado após as clarificações da V1.
+- Não há pendências funcionais conhecidas neste checklist.

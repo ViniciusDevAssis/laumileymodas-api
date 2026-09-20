@@ -89,20 +89,21 @@ sistema.
 O sistema DEVE separar responsabilidades conceituais da seguinte forma:
 
 - `presentation`: entrada e saída, incluindo controllers, requests, responses e exposição da API;
-- `application`: casos de uso e orquestração dos fluxos;
+- `application`: services coesos que orquestram os fluxos da aplicação;
 - `domain`: regras, comportamentos, conceitos e modelos centrais do negócio;
 - `infrastructure`: persistência, integrações, configuração técnica e implementações dependentes de
   frameworks ou serviços externos.
 
-Essa divisão orienta responsabilidades e NÃO exige um modelo ou uma interface própria para cada
-camada. O fluxo padrão PODE ser `Controller -> Service -> Spring Data Repository -> entidade JPA`.
+Essa divisão orienta responsabilidades e NÃO representa Clean Architecture, arquitetura hexagonal
+ou obrigação de pureza entre camadas. O fluxo padrão PODE ser
+`Controller -> Service -> Spring Data Repository -> entidade JPA`.
 Entidades de negócio PODEM ser também entidades JPA, e repositórios internos PODEM ser interfaces
 Spring Data usadas diretamente pelos services. Duplicar entidade de domínio e entidade de
 persistência, criar mapper entre modelos equivalentes ou criar adapter que apenas delega ao
 repositório é PROIBIDO sem benefício concreto documentado.
 
 Fluxos DEVEM ser coordenados por services coesos na camada `application`. Um service PODE agrupar
-várias operações do mesmo contexto; não se exige uma classe de caso de uso por operação. Controllers
+várias operações do mesmo contexto; não se exige uma classe de use case ou comando por operação. Controllers
 DEVEM permanecer pequenos, transações pertencem aos services e detalhes de persistência permanecem
 nos repositórios. Tipos de Spring Security e SDKs externos NÃO DEVEM contaminar regras de negócio.
 
