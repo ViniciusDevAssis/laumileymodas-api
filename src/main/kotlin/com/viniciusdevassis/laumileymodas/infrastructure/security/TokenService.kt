@@ -15,7 +15,6 @@ import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.BadJwtException
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.jwt.JwtDecoder
-import org.springframework.security.oauth2.jwt.JwtIssuerValidator
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.stereotype.Service
@@ -71,7 +70,7 @@ class TokenService(
 		val jwt = decoder.decode(accessToken)
 		val now = Instant.now(clock)
 
-		if (jwt.getClaimAsString("iss") != issuer) {
+		if (jwt.getClaimAsString(ISSUER_CLAIM) != issuer) {
 			throw BadJwtException("Issuer inválido.")
 		}
 		if (!jwt.audience.contains(audience)) {
@@ -96,18 +95,18 @@ class TokenService(
 
 	private fun jwtValidator(): DelegatingOAuth2TokenValidator<Jwt> {
 		val timestampValidator = JwtTimestampValidator(Duration.ZERO).also { it.setClock(clock) }
+		val issuerValidator = OAuth2TokenValidator<Jwt> { jwt ->
+			if (jwt.getClaimAsString(ISSUER_CLAIM) == issuer) {
+				OAuth2TokenValidatorResult.success()
+			} else {
+				OAuth2TokenValidatorResult.failure(OAuth2Error("invalid_token", "Issuer inválido.", null))
+			}
+		}
 		val audienceValidator = OAuth2TokenValidator<Jwt> { jwt ->
 			if (jwt.audience.contains(audience)) {
 				OAuth2TokenValidatorResult.success()
 			} else {
 				OAuth2TokenValidatorResult.failure(OAuth2Error("invalid_token", "Audience inválida.", null))
-			}
-		}
-				val issuerValidator = OAuth2TokenValidator<Jwt> { jwt ->
-			if (jwt.getClaimAsString("iss") == issuer) {
-				OAuth2TokenValidatorResult.success()
-			} else {
-				OAuth2TokenValidatorResult.failure(OAuth2Error("invalid_token", "Issuer inválido.", null))
 			}
 		}
 		return DelegatingOAuth2TokenValidator(issuerValidator, timestampValidator, audienceValidator)
@@ -116,6 +115,7 @@ class TokenService(
 	companion object {
 		private const val HMAC_ALGORITHM = "HmacSHA256"
 		private const val MIN_SECRET_BYTES = 32
+		private const val ISSUER_CLAIM = "iss"
 		private const val ROLE_CLAIM = "role"
 	}
 }
