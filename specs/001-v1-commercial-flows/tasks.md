@@ -24,12 +24,12 @@ modelos duplicados, mappers triviais ou uma classe por operação. A única inte
 
 **Goal**: remover a estrutura gerada anteriormente e deixar um baseline mínimo que compile.
 
-- [ ] T001 Remover a implementação, testes e migrations gerados pelas fases anteriores em `src/main/kotlin/com/viniciusdevassis/laumileymodas/`, `src/test/kotlin/com/viniciusdevassis/laumileymodas/` e `src/main/resources/db/migration/`, preservando `LaumileyModasApiApplication.kt`
-- [ ] T002 Atualizar dependências para Web, Validation, Security, OAuth2 Client/Resource Server, Data JPA, Flyway, PostgreSQL, Cloudinary, Spring HATEOAS e dependências de teste em `pom.xml`
-- [ ] T003 Configurar datasource externo, Flyway, Hibernate validate, context path e limites multipart em `src/main/resources/application.yaml`
-- [ ] T004 Configurar propriedades tipadas mínimas de frontend, segurança, Cloudinary, mídia e WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/config/ApplicationProperties.kt`
-- [ ] T005 [P] Criar configuração de teste com PostgreSQL Testcontainers em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/PostgresIntegrationTest.kt` e `src/test/resources/application-test.yaml`
-- [ ] T006 Verificar que o baseline compila e que o contexto de teste inicia sem H2 em `src/test/kotlin/com/viniciusdevassis/laumileymodas/LaumileyModasApiApplicationTests.kt`
+- [X] T001 Remover a implementação, testes e migrations gerados pelas fases anteriores em `src/main/kotlin/com/viniciusdevassis/laumileymodas/`, `src/test/kotlin/com/viniciusdevassis/laumileymodas/` e `src/main/resources/db/migration/`, preservando `LaumileyModasApiApplication.kt`
+- [X] T002 Atualizar dependências para Web, Validation, Security, OAuth2 Client/Resource Server, Data JPA, Flyway, PostgreSQL, Cloudinary, Spring HATEOAS e dependências de teste em `pom.xml`
+- [X] T003 Configurar datasource externo, Flyway, Hibernate validate, context path e limites multipart em `src/main/resources/application.yaml`
+- [X] T004 Configurar propriedades tipadas mínimas de frontend, segurança, Cloudinary, mídia e WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/config/ApplicationProperties.kt`
+- [X] T005 [P] Criar configuração de teste com PostgreSQL Testcontainers em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/PostgresIntegrationTest.kt` e `src/test/resources/application-test.yaml`
+- [X] T006 Verificar que o baseline compila e que o contexto de teste inicia sem H2 em `src/test/kotlin/com/viniciusdevassis/laumileymodas/LaumileyModasApiApplicationTests.kt`
 
 **Checkpoint**: projeto mínimo compila, aplicação usa PostgreSQL/Flyway e testes podem compartilhar o
 container PostgreSQL.

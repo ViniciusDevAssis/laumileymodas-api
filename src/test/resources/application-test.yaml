@@ -1,9 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:tc:postgresql:17-alpine:///laumiley_test
-    username: test
-    password: test
-    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
   security:
     oauth2:
       client:
@@ -22,8 +17,17 @@ laumiley:
     admin:
       google-sub: test-admin-sub
     jwt:
-      private-key: test-private-key
-      public-key: test-public-key
+      secret: test-secret-with-at-least-256-bits-for-hmac-validation
+      issuer: laumiley-modas-api-test
+      audience: laumiley-api-test
+      access-token-ttl: 15m
+      refresh-token-ttl: 30d
+    cookies:
+      secure: false
+      same-site: Lax
+    rate-limit:
+      max-failures: 5
+      window: 15m
   cloudinary:
     cloud-name: test-cloud
     api-key: test-key

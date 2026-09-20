@@ -32,3 +32,31 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /api/v1
+
+laumiley:
+  frontend:
+    allowed-origins: ${LAUMILEY_FRONTEND_ALLOWED_ORIGINS:http://localhost:3000}
+    auth-success-url: ${LAUMILEY_FRONTEND_AUTH_SUCCESS_URL:http://localhost:3000/auth/google/success}
+    registration-url: ${LAUMILEY_FRONTEND_REGISTRATION_URL:http://localhost:3000/auth/google/complete-registration}
+    auth-error-url: ${LAUMILEY_FRONTEND_AUTH_ERROR_URL:http://localhost:3000/auth/google/error}
+  security:
+    admin:
+      google-sub: ${LAUMILEY_ADMIN_GOOGLE_SUB:}
+    jwt:
+      secret: ${LAUMILEY_JWT_SECRET:}
+      issuer: ${LAUMILEY_JWT_ISSUER:laumiley-modas-api}
+      audience: ${LAUMILEY_JWT_AUDIENCE:laumiley-api}
+      access-token-ttl: ${LAUMILEY_ACCESS_TOKEN_TTL:15m}
+      refresh-token-ttl: ${LAUMILEY_REFRESH_TOKEN_TTL:30d}
+    cookies:
+      secure: ${LAUMILEY_COOKIE_SECURE:false}
+      same-site: ${LAUMILEY_COOKIE_SAME_SITE:Lax}
+    rate-limit:
+      max-failures: ${LAUMILEY_AUTH_RATE_LIMIT_MAX_FAILURES:5}
+      window: ${LAUMILEY_AUTH_RATE_LIMIT_WINDOW:15m}
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+  whatsapp:
+    number: ${LAUMILEY_WHATSAPP_NUMBER:}

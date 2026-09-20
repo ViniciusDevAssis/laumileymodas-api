@@ -1,12 +1,9 @@
 package com.viniciusdevassis.laumileymodas
 
+import com.viniciusdevassis.laumileymodas.integration.PostgresIntegrationTest
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.test.context.ActiveProfiles
 
-@SpringBootTest
-@ActiveProfiles("test")
-class LaumileyModasApiApplicationTests {
+class LaumileyModasApiApplicationTests : PostgresIntegrationTest() {
 
 	@Test
 	fun contextLoads() {
