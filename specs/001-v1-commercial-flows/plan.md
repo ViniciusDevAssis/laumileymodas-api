@@ -83,7 +83,6 @@ src/main/kotlin/com/viniciusdevassis/laumileymodas/
 │   │   ├── Account.kt
 │   │   ├── AccountExternalIdentity.kt
 │   │   ├── RefreshToken.kt
-│   │   ├── OAuthHandoff.kt
 │   │   ├── Customer.kt
 │   │   ├── Category.kt
 │   │   ├── Product.kt
@@ -99,15 +98,21 @@ src/main/kotlin/com/viniciusdevassis/laumileymodas/
 └── infrastructure/
     ├── repositories/
     │   ├── AccountRepository.kt
+    │   ├── AccountExternalIdentityRepository.kt
     │   ├── CustomerRepository.kt
-    │   ├── CatalogRepositories.kt
+    │   ├── RefreshTokenRepository.kt
+    │   ├── CategoryRepository.kt
+    │   ├── ProductRepository.kt
     │   ├── InterestRepository.kt
-    │   └── CrmRepositories.kt
+    │   ├── ReminderRepository.kt
+    │   └── ContactRecordRepository.kt
     ├── security/
     │   ├── SecurityConfiguration.kt
-    │   ├── JwtService.kt
+    │   ├── SecurityFilter.kt
+    │   ├── TokenService.kt
     │   ├── RefreshTokenCookie.kt
-    │   ├── GoogleLoginHandlers.kt
+    │   ├── CustomUserDetailsService.kt
+    │   ├── OAuth2SuccessHandler.kt
     │   ├── AuthenticationRateLimiter.kt
     │   ├── ApiAuthenticationEntryPoint.kt
     │   └── ApiAccessDeniedHandler.kt
@@ -196,7 +201,7 @@ O modelo completo está em [data-model.md](./data-model.md). Decisões principai
 - `Reminder.interest_id` e `ContactRecord.interest_id` são únicos e compartilham o mesmo interesse;
 - `ContactRecord` manual nasce concluído; o automático nasce pendente;
 - `Reminder` nasce automaticamente e só termina com o contato automático;
-- refresh tokens persistem apenas hash e família; handoffs persistem apenas handle hash e estado
+- refresh tokens persistem apenas hash e família; o login Google conclui diretamente no backend sem tabela temporária intermediária
   mínimo temporário.
 
 As migrations mantêm FKs, uniques, checks e índices necessários. Migrations aplicadas não são
@@ -219,7 +224,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 - decidir ADMIN exclusivamente quando `sub == ADMIN_GOOGLE_SUB`; demais identidades seguem CLIENT;
 - resolver vínculo exclusivamente por `provider + sub`;
 - rejeitar conflito de e-mail sem linking automático;
-- criar/consumir handoff de uso único;
+- criar/resolver Account e AccountExternalIdentity pelo `sub` do Google sem linking automático por e-mail;
 - concluir cadastro Google ou login e delegar emissão de tokens ao `AuthService`.
 
 ### `CatalogService`
@@ -271,7 +276,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 
 - `CookieCsrfTokenRepository` com `XSRF-TOKEN` e `X-XSRF-TOKEN`;
 - `GET /auth/csrf` materializa ou renova o token;
-- refresh, logout e consumo/conclusão de handoff exigem CSRF;
+- refresh e logout exigem CSRF por consumirem cookie;
 - endpoints Bearer e callback OIDC não são protegidos por cookie CSRF;
 - token CSRF é renovado após autenticação/logout quando o Spring o invalidar.
 
@@ -292,7 +297,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 - cadastro público nunca aceita papel;
 - URLs de frontend são allowlist fixa em configuração; não há redirect arbitrário;
 - success/failure handlers customizam somente o comportamento após autenticação;
-- handoff de uso único fica em cookie e seu hash no banco; nenhum token vai na URL.
+- o success handler cria refresh token HttpOnly e redireciona para URL fixa do frontend; nenhum token vai na URL.
 
 ### Authorization, CORS and errors
 
@@ -409,7 +414,6 @@ evitando construir toda a infraestrutura antecipadamente.
 | Abstraction | Why it exists now | Simpler option rejected because |
 |---|---|---|
 | `MediaStorage` | Isola o Cloudinary conforme a Constitution. | SDK no service misturaria regra da aplicação com detalhe de provedor externo. |
-| `OAuthHandoff` | Garante troca única sem tokens na URL. | Cookie autocontido não permite invalidar reuso confiavelmente. |
 | `ApiError`/`ApiException` | Mantém códigos estáveis e contrato único. | Exceptions ad hoc quebrariam consistência. |
 
 Nenhuma outra abstração própria está pré-aprovada. Sua criação exige atualizar esta tabela ou

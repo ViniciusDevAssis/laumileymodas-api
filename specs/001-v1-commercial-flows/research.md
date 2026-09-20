@@ -174,7 +174,7 @@ família.
 `CookieCsrfTokenRepository` publica `XSRF-TOKEN` legível pelo frontend e valida o header
 `X-XSRF-TOKEN`. `GET /auth/csrf` materializa o token sem autenticar ou emitir credenciais. CSRF é
 exigido apenas nos endpoints da aplicação que consomem cookies: refresh, logout e
-troca/conclusão do handoff Google. Bearer-only endpoints não dependem de cookie. Os endpoints GET
+refresh e logout. Bearer-only endpoints não dependem de cookie. Os endpoints GET
 do protocolo OAuth usam a proteção `state` nativa do Spring Security.
 
 **Rationale**: refresh não precisa ser JWT; opacidade reduz claims e chaves. CSRF permanece
@@ -198,11 +198,7 @@ quando o `sub` já está vinculado. Um novo `sub` de cliente sem Account inicia 
 já pertence a Account sem aquele vínculo, o fluxo é rejeitado; não há linking automático nem manual
 na V1. E-mail nunca concede ou confirma papel ADMIN.
 
-Após o Spring concluir o callback, um success handler executa somente o comportamento local. Um
-handoff opaco de uso único e curta duração é guardado em cookie `HttpOnly`; seu hash e estado mínimo
-ficam no PostgreSQL. O backend redireciona somente para URLs configuradas. O frontend troca o
-handoff com CSRF; tokens sensíveis nunca aparecem na URL. Cliente Google novo informa apenas dados
-adicionais necessários antes da troca final.
+Após o Spring concluir o callback, um success handler executa somente o comportamento local. Ele resolve ou cria Account/AccountExternalIdentity pelo `sub`, emite refresh token opaco em cookie `HttpOnly` e redireciona somente para URL fixa configurada. Depois do redirect, o frontend chama `POST /auth/refresh` com cookie e CSRF para obter o access token. Tokens sensíveis nunca aparecem na URL.
 
 O mecanismo padrão de authorization request pode usar uma sessão HTTP temporária para correlacionar
 `state`. Essa sessão existe somente durante o protocolo OAuth e é invalidada pelo success/failure
@@ -210,8 +206,7 @@ handler. A autenticação das APIs continua stateless por access token JWT em um
 separada.
 
 **Rationale**: delegar os endpoints do protocolo ao Spring reduz código sensível e segue seus
-defaults documentados. O handoff continua necessário para uso único sem expor identidade ou token
-na URL. O domínio persiste apenas identidade externa genérica (`provider`, `subject`).
+defaults documentados. O success handler usa somente redirecionamentos fixos configurados e não expõe identidade ou token na URL. O domínio persiste apenas identidade externa genérica (`provider`, `subject`).
 
 **Alternatives considered**: callback/controller próprio, repository cookie de authorization
 request, entradas CLIENT/ADMIN separadas, vincular por e-mail, access token na URL e redirect URL

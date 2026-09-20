@@ -124,8 +124,8 @@ paths:
       operationId: processGoogleLoginCallback
       description: |
         O Spring valida state, troca o authorization code e autentica o OIDC user. Depois disso,
-        o success handler resolve o comportamento local pelo sub, cria um handoff opaco de uso
-        único e redireciona somente para URL configurada. Tokens não aparecem na URL.
+        o success handler resolve ou cria a Account local pelo sub, emite refresh token em cookie
+        HttpOnly e redireciona somente para URL configurada. Tokens não aparecem na URL.
       parameters:
         - name: code
           in: query
@@ -141,55 +141,6 @@ paths:
           headers:
             Location: { schema: { type: string, format: uri } }
             Set-Cookie: { schema: { type: string } }
-
-  /auth/google/exchange:
-    post:
-      tags: [Auth]
-      summary: Consome handoff de uma Account Google já existente
-      operationId: exchangeGoogleHandoff
-      parameters:
-        - $ref: '#/components/parameters/XsrfToken'
-      security:
-        - oauthHandoffCookie: []
-      responses:
-        '200':
-          description: Handoff consumido, access token emitido e refresh configurado
-          headers:
-            Set-Cookie: { schema: { type: string } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/TokenResponse' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /auth/google/customers:
-    post:
-      tags: [Auth]
-      summary: Conclui cadastro de novo cliente Google e consome o handoff
-      operationId: completeGoogleCustomerRegistration
-      parameters:
-        - $ref: '#/components/parameters/XsrfToken'
-      security:
-        - oauthHandoffCookie: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/GoogleCustomerCompletionRequest' }
-      responses:
-        '201':
-          description: Account e Customer criados; tokens da aplicação emitidos
-          headers:
-            Location: { $ref: '#/components/headers/Location' }
-            Set-Cookie: { schema: { type: string } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/TokenResponse' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
 
   /customers/me/proactive-contact-consent:
     get:
@@ -734,11 +685,6 @@ components:
       type: apiKey
       in: cookie
       name: LAUMILEY_REFRESH
-    oauthHandoffCookie:
-      type: apiKey
-      in: cookie
-      name: LAUMILEY_OAUTH_HANDOFF
-
   headers:
     Location:
       description: URI do recurso criado
@@ -876,14 +822,6 @@ components:
         lastName: { type: string, minLength: 1, maxLength: 120 }
         email: { type: string, format: email, maxLength: 320 }
         password: { type: string, minLength: 8, maxLength: 200, writeOnly: true }
-        whatsappPhone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
-    GoogleCustomerCompletionRequest:
-      type: object
-      additionalProperties: false
-      required: [firstName, lastName, whatsappPhone]
-      properties:
-        firstName: { type: string, minLength: 1, maxLength: 120 }
-        lastName: { type: string, minLength: 1, maxLength: 120 }
         whatsappPhone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
     LoginRequest:
       type: object

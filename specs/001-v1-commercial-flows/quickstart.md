@@ -145,7 +145,7 @@ Invoke-RestMethod -Method Post -Uri "$api/auth/refresh" `
 ```
 
 `GET /auth/csrf` apenas materializa `XSRF-TOKEN`. Refresh rotaciona o cookie e reutilizar o valor
-anterior retorna `401` e revoga a família. Refresh, logout e handoff sem CSRF válido são rejeitados.
+anterior retorna `401` e revoga a família. Refresh e logout sem CSRF válido são rejeitados.
 Após autenticação ou logout, obtenha novo token CSRF quando o Spring limpar o anterior.
 
 ## 7. Valide Google OIDC
@@ -166,9 +166,7 @@ Valide separadamente:
 
 O Spring Security gera a authorization request e processa o callback padrão
 `/api/v1/login/oauth2/code/google`. O success handler apenas resolve o comportamento local, cria
-handoff opaco em cookie e redireciona para URL fixa do frontend. O frontend chama
-`POST /auth/google/exchange` ou `POST /auth/google/customers` com cookie e CSRF. Access token,
-refresh token, identidade Google e handoff não aparecem na URL.
+refresh token opaco em cookie `HttpOnly` e redireciona para URL fixa do frontend. Depois do redirect, o frontend chama `POST /auth/refresh` com cookie e CSRF para obter o access token. Access token, refresh token e identidade Google não aparecem na URL.
 
 ## 8. Valide consentimento
 

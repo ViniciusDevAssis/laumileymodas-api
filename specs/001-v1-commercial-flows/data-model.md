@@ -21,7 +21,6 @@ Credencial e autoridade local da aplicação.
 |---|---|---|
 | `id` | UUID | PK |
 | `email` | varchar(320) | obrigatório |
-| `normalizedEmail` | varchar(320) | obrigatório, unique |
 | `passwordHash` | varchar(255) | nullable; obrigatório para cadastro tradicional |
 | `role` | `CLIENT`, `ADMIN` | obrigatório e imutável |
 | `createdAt` | instant | obrigatório |
@@ -74,30 +73,7 @@ Derived state:
 
 Rotação consome o atual e cria outro na mesma família. Reuso de um token consumido revoga todos os
 tokens ainda ativos da família.
-
-## `OAuthHandoff`
-
-Troca temporária e de uso único entre callback Google e frontend.
-
-| Field | Type | Rules |
-|---|---|---|
-| `id` | UUID | PK |
-| `handleHash` | char(64) | hash do valor opaco do cookie, unique |
-| `accountId` | UUID | FK Account, nullable para novo cliente |
-| `googleSubject` | varchar(255) | obrigatório para novo vínculo |
-| `verifiedEmail` | varchar(320) | obrigatório |
-| `givenName` | varchar(120) | nullable |
-| `familyName` | varchar(120) | nullable |
-| `expiresAt` | instant | obrigatório e curto |
-| `consumedAt` | instant | nullable |
-| `createdAt` | instant | obrigatório |
-
-O papel não é armazenado como intenção no handoff: ADMIN é decidido exclusivamente comparando o
-`sub` validado com `ADMIN_GOOGLE_SUB`; os demais seguem o fluxo CLIENT. O valor bruto existe somente
-no cookie `HttpOnly`. Consumo exige handle válido, não expirado, CSRF e lock da linha. Registros
-expirados podem ser removidos por manutenção posterior simples, sem job obrigatório na V1.
-
-## `Customer`
+`n## `Customer`
 
 Dados comerciais do cliente.
 
@@ -234,7 +210,6 @@ Rules:
 Account 1 ─── 0..* AccountExternalIdentity
 Account 1 ─── 0..* RefreshToken
 Account 1 ─── 0..1 Customer
-Account 1 ─── 0..* OAuthHandoff
 Category 1 ─── * Product
 Product 1 ─── 1..* ProductImage
 Customer 1 ─── * Interest * ─── 1 Product
@@ -283,18 +258,10 @@ ACTIVE -- logout --> REVOKED
 CONSUMED -- reuse --> active family members REVOKED
 ACTIVE -- time passes --> EXPIRED (derived)
 ```
-
-### OAuthHandoff
-
-```text
-ACTIVE -- exchange/finish registration --> CONSUMED
-ACTIVE -- time passes ------------------> EXPIRED (derived)
-```
-
-## Transaction Boundaries
+`n## Transaction Boundaries
 
 - Account tradicional e Customer são criados juntos.
-- Vínculo Google, Account/Customer e consumo de handoff são atômicos conforme o fluxo.
+- Vínculo Google, criação/resolução de Account/Customer e emissão do refresh token são atômicos conforme o fluxo.
 - Rotação de refresh usa lock e cria sucessor na mesma transação.
 - Product e referências de imagens são persistidos preservando suas invariantes; operação externa
   Cloudinary usa compensação simples descrita no plan.
@@ -304,10 +271,9 @@ ACTIVE -- time passes ------------------> EXPIRED (derived)
 
 ## Indexes
 
-- `account(normalized_email)` unique e unique parcial para papel ADMIN;
+- `account(email)` unique e unique parcial para papel ADMIN;
 - `account_external_identity(provider, subject)` unique;
 - `refresh_token(token_hash)` unique, índices em `family_id`, `account_id`, `expires_at`;
-- `oauth_handoff(handle_hash)` unique e índice em `expires_at`;
 - `customer(whatsapp_phone)` e campos normalizados usados na pesquisa;
 - `category(normalized_name)` unique;
 - `product(status, created_at desc)` e `product(category_id)`;

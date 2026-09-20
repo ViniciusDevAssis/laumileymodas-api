@@ -1,6 +1,5 @@
 package com.viniciusdevassis.laumileymodas.infrastructure.repositories
 
-import com.viniciusdevassis.laumileymodas.domain.entities.Category
 import com.viniciusdevassis.laumileymodas.domain.entities.Product
 import com.viniciusdevassis.laumileymodas.domain.enums.ProductStatus
 import org.springframework.data.domain.Page
@@ -9,9 +8,6 @@ import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.UUID
-
-@Repository
-interface CategoryRepository : JpaRepository<Category, UUID>
 
 @Repository
 interface ProductRepository : JpaRepository<Product, UUID> {

@@ -71,8 +71,8 @@ válida.
 
 - [X] T016 [US1] Criar tabelas category, product e product_image com FKs, checks e índices em `src/main/resources/db/migration/V1__create_catalog.sql`
 - [X] T017 [P] [US1] Implementar entidades JPA `Category`, `Product` e `ProductImage` com invariantes de ativação/imagem principal em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Category.kt`, `Product.kt` e `ProductImage.kt`
-- [X] T018 [P] [US1] Definir `ProductStatus` em `../../src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/ProductStatus.kt`
-- [X] T019 [US1] Criar repositories Spring Data e consultas paginadas de produtos ativos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/CatalogRepositories.kt`
+- [X] T018 [P] [US1] Definir `ProductStatus` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/Role.kt`, `Provider.kt`, `FollowUpStatus.kt` e `ContactChannel.kt`
+- [X] T019 [US1] Criar repositories Spring Data e consultas paginadas de produtos ativos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/CategoryRepository.kt` e `ProductRepository.kt`
 - [X] T020 [US1] Implementar consultas públicas coesas em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
 - [X] T021 [P] [US1] Definir DTOs públicos de produto/categoria/imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CatalogDtos.kt`
 - [X] T022 [US1] Implementar `GET /products` e `GET /products/{id}` com `PagedModel`, `EntityModel` e links em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/CatalogController.kt`
@@ -94,29 +94,29 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T023 [P] [US2] Testar cadastro público sempre CLIENT, BCrypt custo 12 e login local válido/inválido em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/LocalAuthenticationIntegrationTest.kt`
 - [ ] T024 [P] [US2] Testar JWT válido/expirado/inválido, refresh rotativo, revogação e reuso em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/TokenIntegrationTest.kt`
 - [ ] T025 [P] [US2] Testar `GET /auth/csrf`, proteção seletiva de cookies e CORS configurado em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CsrfAndCorsIntegrationTest.kt`
-- [ ] T026 [P] [US2] Testar endpoints OAuth nativos, callback padrão, login/cadastro Google CLIENT, uso único do handoff e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
+- [ ] T026 [P] [US2] Testar endpoints OAuth nativos, callback padrão, login/cadastro Google CLIENT, refresh cookie pós-callback e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
 - [ ] T027 [P] [US2] Testar rate limiting 429 e garantir que tentativas válidas normais não são bloqueadas em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AuthenticationRateLimitIntegrationTest.kt`
 - [ ] T028 [P] [US2] Testar interesse idempotente, produto inativo, URL WhatsApp e criação exata do acompanhamento em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/InterestIntegrationTest.kt`
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Criar account, external_identity, customer, refresh_token e oauth_handoff em `src/main/resources/db/migration/V2__create_accounts_and_customers.sql`
-- [ ] T030 [US2] Criar interest, reminder e contact_record com uniques por interest_id em `src/main/resources/db/migration/V3__create_interests_and_crm.sql`
-- [ ] T031 [P] [US2] Implementar entidades JPA de identidade e cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Account.kt`, `AccountExternalIdentity.kt`, `Customer.kt`, `RefreshToken.kt` e `OAuthHandoff.kt`
-- [ ] T032 [P] [US2] Implementar entidades JPA `Interest`, `Reminder` e `ContactRecord` e suas transições em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Interest.kt`, `Reminder.kt` e `ContactRecord.kt`
-- [ ] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `../../src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/ProductStatus.kt`
-- [ ] T034 [US2] Criar repositories Spring Data para contas, clientes, tokens e handoffs em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/AccountRepository.kt` e `CustomerRepository.kt`
-- [ ] T035 [US2] Criar repositories Spring Data para Interest, Reminder e ContactRecord em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/InterestRepository.kt` e `CrmRepositories.kt`
-- [ ] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/JwtService.kt`
+- [X] T029 [US2] Criar account, external_identity, customer e refresh_token em `src/main/resources/db/migration/V2__create_accounts_and_customers.sql`
+- [X] T030 [US2] Criar interest, reminder e contact_record com uniques por interest_id em `src/main/resources/db/migration/V3__create_interests_and_crm.sql`
+- [X] T031 [P] [US2] Implementar entidades JPA de identidade e cliente em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Account.kt`, `AccountExternalIdentity.kt`, `Customer.kt` e `RefreshToken.kt`
+- [X] T032 [P] [US2] Implementar entidades JPA `Interest`, `Reminder` e `ContactRecord` e suas transições em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Interest.kt`, `Reminder.kt` e `ContactRecord.kt`
+- [X] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/Role.kt`, `Provider.kt`, `FollowUpStatus.kt` e `ContactChannel.kt`
+- [X] T034 [US2] Criar repositories Spring Data para contas, identidade externa, clientes e tokens, um repository por arquivo, em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/`
+- [X] T035 [US2] Criar repositories Spring Data para Interest, Reminder e ContactRecord, um repository por arquivo, em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/`
+- [ ] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/TokenService.kt`
 - [ ] T037 [P] [US2] Implementar cookie de refresh opaco e hash seguro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/RefreshTokenCookie.kt`
 - [ ] T038 [P] [US2] Implementar limitador local de falhas de autenticação em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/AuthenticationRateLimiter.kt`
 - [ ] T039 [US2] Implementar cadastro, login, emissão, rotação, reuso e logout em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/AuthService.kt`
-- [ ] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail e handoff de uso único em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
-- [ ] T041 [US2] Implementar success/failure handlers somente para o comportamento posterior ao OAuth e invalidar a sessão temporária em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/GoogleLoginHandlers.kt`
-- [ ] T042 [US2] Configurar cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Resource Server HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
+- [ ] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail sem linking automático e criação/resolução direta de Account em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
+- [ ] T041 [US2] Implementar `OAuth2SuccessHandler` somente para o comportamento posterior ao OAuth em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/OAuth2SuccessHandler.kt`
+- [ ] T042 [US2] Configurar SecurityFilter, CustomUserDetailsService e cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Bearer JWT HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
 - [ ] T043 [P] [US2] Definir DTOs de cadastro, login, tokens e Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/AuthDtos.kt` e `CustomerDtos.kt`
 - [ ] T044 [US2] Implementar cadastro, login, refresh, logout e CSRF em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt` e `CustomerController.kt`
-- [ ] T045 [US2] Manter o OAuth no fluxo nativo do Spring Security, sem controller/resolver/repository de authorization request customizados, expondo somente exchange e conclusão de cadastro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt`
+- [ ] T045 [US2] Manter o OAuth no fluxo nativo do Spring Security, sem controller/resolver/repository de authorization request customizados, sem expor exchange, conclusão de cadastro Google ou callback customizado em controller
 - [ ] T046 [US2] Implementar confirmação idempotente, URL WhatsApp e criação transacional do trio em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/InterestService.kt`
 - [ ] T047 [P] [US2] Adicionar DTO HAL do interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CustomerDtos.kt`
 - [ ] T048 [US2] Implementar `POST /products/{productId}/interests` com Location e links de produto/WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/InterestController.kt`
