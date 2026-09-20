@@ -41,13 +41,13 @@ container PostgreSQL.
 **Goal**: disponibilizar apenas o contrato de erros e configuração comum exigidos por todos os
 slices.
 
-- [ ] T007 Criar catálogo `ApiError` com códigos globalmente únicos e `ApiException` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/exceptions/ApiError.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/exceptions/ApiException.kt`
-- [ ] T008 Criar `ApiErrorResponse` e tratamento de validação, ApiException e fallback 500 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/advice/GlobalExceptionHandler.kt`
-- [ ] T009 [P] Disponibilizar `Clock.systemUTC()` diretamente como bean compartilhado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/config/TimeConfiguration.kt`
-- [ ] T010 Implementar `ApiAuthenticationEntryPoint` e `ApiAccessDeniedHandler` com o mesmo payload em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/ApiAuthenticationEntryPoint.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/ApiAccessDeniedHandler.kt`
-- [ ] T011 Configurar a cadeia Spring Security stateless inicial, CORS por origens configuradas e `@EnableMethodSecurity` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
-- [ ] T012 [P] Testar o contrato de validação, exceção conhecida e fallback seguro em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/ApiErrorIntegrationTest.kt`
-- [ ] T013 Testar respostas 401 e 403 pelo contrato próprio do Spring Security em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/SecurityErrorIntegrationTest.kt`
+- [X] T007 Criar catálogo `ApiError` com códigos globalmente únicos e `ApiException` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/exceptions/ApiError.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/exceptions/ApiException.kt`
+- [X] T008 Criar `ApiErrorResponse` e tratamento de validação, ApiException e fallback 500 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/advice/GlobalExceptionHandler.kt`
+- [X] T009 [P] Disponibilizar `Clock.systemUTC()` diretamente como bean compartilhado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/config/TimeConfiguration.kt`
+- [X] T010 Implementar `ApiAuthenticationEntryPoint` e `ApiAccessDeniedHandler` com o mesmo payload em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/ApiAuthenticationEntryPoint.kt` e `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/ApiAccessDeniedHandler.kt`
+- [X] T011 Configurar a cadeia Spring Security stateless inicial, CORS por origens configuradas e `@EnableMethodSecurity` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
+- [X] T012 [P] Testar o contrato de validação, exceção conhecida e fallback seguro em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/ApiErrorIntegrationTest.kt`
+- [X] T013 Testar respostas 401 e 403 pelo contrato próprio do Spring Security em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/SecurityErrorIntegrationTest.kt`
 
 **Checkpoint**: erros da aplicação e do Spring Security possuem formato único; nenhuma estrutura de
 domínio ou persistência foi antecipada.
