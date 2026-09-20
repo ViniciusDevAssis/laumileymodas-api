@@ -107,9 +107,9 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [X] T033 [P] [US2] Adicionar enums Role, Provider, FollowUpStatus e canais necessários da V1 em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/Role.kt`, `Provider.kt`, `FollowUpStatus.kt` e `ContactChannel.kt`
 - [X] T034 [US2] Criar repositories Spring Data para contas, identidade externa, clientes e tokens, um repository por arquivo, em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/`
 - [X] T035 [US2] Criar repositories Spring Data para Interest, Reminder e ContactRecord, um repository por arquivo, em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/`
-- [ ] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/TokenService.kt`
-- [ ] T037 [P] [US2] Implementar cookie de refresh opaco e hash seguro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/RefreshTokenCookie.kt`
-- [ ] T038 [P] [US2] Implementar limitador local de falhas de autenticação em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/AuthenticationRateLimiter.kt`
+- [X] T036 [P] [US2] Implementar JWT HMAC com validação de issuer/audience/expiração em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/TokenService.kt`
+- [X] T037 [P] [US2] Implementar cookie de refresh opaco e hash seguro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/RefreshTokenCookie.kt`
+- [X] T038 [P] [US2] Implementar limitador local de falhas de autenticação em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/AuthenticationRateLimiter.kt`
 - [ ] T039 [US2] Implementar cadastro, login, emissão, rotação, reuso e logout em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/AuthService.kt`
 - [ ] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail sem linking automático e criação/resolução direta de Account em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
 - [ ] T041 [US2] Implementar `OAuth2SuccessHandler` somente para o comportamento posterior ao OAuth em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/OAuth2SuccessHandler.kt`
