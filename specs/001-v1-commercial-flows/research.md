@@ -158,8 +158,9 @@ família.
 
 `CookieCsrfTokenRepository` publica `XSRF-TOKEN` legível pelo frontend e valida o header
 `X-XSRF-TOKEN`. `GET /auth/csrf` materializa o token sem autenticar ou emitir credenciais. CSRF é
-exigido apenas nos endpoints que consomem cookies: refresh, logout e troca/conclusão do handoff
-Google. Bearer-only endpoints não dependem de cookie e são ignorados pelo matcher CSRF.
+exigido apenas nos endpoints da aplicação que consomem cookies: refresh, logout e
+troca/conclusão do handoff Google. Bearer-only endpoints não dependem de cookie. Os endpoints GET
+do protocolo OAuth usam a proteção `state` nativa do Spring Security.
 
 **Rationale**: refresh não precisa ser JWT; opacidade reduz claims e chaves. CSRF permanece
 necessário porque o navegador envia cookies automaticamente.
@@ -170,26 +171,36 @@ Referência: [Spring Security CSRF](https://docs.spring.io/spring-security/refer
 
 ## 9. Google OpenID Connect
 
-**Decision**: usar OAuth2 Login/OIDC do Spring Security com escopos `openid`, `profile` e `email`.
-Existem dois pontos de início, `/auth/google/client` e `/auth/google/admin`, cuja intenção é
-protegida no `state`. Ambos convergem para o registration Google e para o callback público
-`/api/v1/auth/google/callback`.
+**Decision**: usar OAuth2 Login/OIDC nativo do Spring Security com um único registrationId `google`
+e escopos `openid`, `profile` e `email`. O login começa em
+`/oauth2/authorization/google` e o próprio Spring processa o callback padrão
+`/login/oauth2/code/google`. Não se customiza `authorizationEndpoint`, `redirectionEndpoint` ou
+`redirect-uri`.
 
-O `sub` é o identificador confiável. Login só prossegue quando o `sub` já está vinculado. Um novo
-`sub` sem Account inicia cadastro de cliente. Se o e-mail já pertence a Account sem aquele vínculo,
-o fluxo é rejeitado; não há linking automático nem manual na V1. O fluxo ADMIN exige que o `sub`
-seja exatamente o valor configurado no backend e nunca promove uma Account pública.
+O `sub` é o identificador confiável. Se ele for igual ao `ADMIN_GOOGLE_SUB` configurado, o
+comportamento local é ADMIN; qualquer outro `sub` segue como CLIENT. Login só prossegue diretamente
+quando o `sub` já está vinculado. Um novo `sub` de cliente sem Account inicia cadastro. Se o e-mail
+já pertence a Account sem aquele vínculo, o fluxo é rejeitado; não há linking automático nem manual
+na V1. E-mail nunca concede ou confirma papel ADMIN.
 
-Após o callback, um handoff opaco de uso único e curta duração é guardado em cookie `HttpOnly`; seu
-hash e estado mínimo ficam no PostgreSQL. O backend redireciona somente para URLs configuradas. O
-frontend troca o handoff com CSRF; tokens sensíveis nunca aparecem na URL. Cliente Google novo
-informa apenas dados adicionais necessários antes da troca final.
+Após o Spring concluir o callback, um success handler executa somente o comportamento local. Um
+handoff opaco de uso único e curta duração é guardado em cookie `HttpOnly`; seu hash e estado mínimo
+ficam no PostgreSQL. O backend redireciona somente para URLs configuradas. O frontend troca o
+handoff com CSRF; tokens sensíveis nunca aparecem na URL. Cliente Google novo informa apenas dados
+adicionais necessários antes da troca final.
 
-**Rationale**: o registro temporário permite uso único e invalidação confiável sem expor identidade
-ou token na URL. O domínio persiste apenas identidade externa genérica (`provider`, `subject`).
+O mecanismo padrão de authorization request pode usar uma sessão HTTP temporária para correlacionar
+`state`. Essa sessão existe somente durante o protocolo OAuth e é invalidada pelo success/failure
+handler. A autenticação das APIs continua stateless por access token JWT em uma cadeia de segurança
+separada.
 
-**Alternatives considered**: vincular por e-mail, callback com JSON, access token na URL e redirect
-URL fornecida pelo cliente foram rejeitados por risco de tomada de conta ou vazamento.
+**Rationale**: delegar os endpoints do protocolo ao Spring reduz código sensível e segue seus
+defaults documentados. O handoff continua necessário para uso único sem expor identidade ou token
+na URL. O domínio persiste apenas identidade externa genérica (`provider`, `subject`).
+
+**Alternatives considered**: callback/controller próprio, repository cookie de authorization
+request, entradas CLIENT/ADMIN separadas, vincular por e-mail, access token na URL e redirect URL
+fornecida pelo cliente foram rejeitados por complexidade ou risco desnecessário.
 
 Referência: [Spring Security OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html).
 

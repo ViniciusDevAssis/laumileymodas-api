@@ -83,7 +83,6 @@ Troca temporária e de uso único entre callback Google e frontend.
 |---|---|---|
 | `id` | UUID | PK |
 | `handleHash` | char(64) | hash do valor opaco do cookie, unique |
-| `intent` | `CLIENT`, `ADMIN` | obrigatório |
 | `accountId` | UUID | FK Account, nullable para novo cliente |
 | `googleSubject` | varchar(255) | obrigatório para novo vínculo |
 | `verifiedEmail` | varchar(320) | obrigatório |
@@ -93,9 +92,10 @@ Troca temporária e de uso único entre callback Google e frontend.
 | `consumedAt` | instant | nullable |
 | `createdAt` | instant | obrigatório |
 
-O valor bruto existe somente no cookie `HttpOnly`. Consumo exige handle válido, não expirado,
-CSRF e lock da linha. Registros expirados podem ser removidos por manutenção posterior simples, sem
-job obrigatório na V1.
+O papel não é armazenado como intenção no handoff: ADMIN é decidido exclusivamente comparando o
+`sub` validado com `ADMIN_GOOGLE_SUB`; os demais seguem o fluxo CLIENT. O valor bruto existe somente
+no cookie `HttpOnly`. Consumo exige handle válido, não expirado, CSRF e lock da linha. Registros
+expirados podem ser removidos por manutenção posterior simples, sem job obrigatório na V1.
 
 ## `Customer`
 

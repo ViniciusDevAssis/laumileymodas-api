@@ -21,12 +21,9 @@ laumiley:
   security:
     admin:
       google-sub: test-admin-sub
-      google-email: admin@example.test
     jwt:
       private-key: test-private-key
       public-key: test-public-key
-    oauth-handoff:
-      encryption-key: test-oauth-handoff-key
   cloudinary:
     cloud-name: test-cloud
     api-key: test-key

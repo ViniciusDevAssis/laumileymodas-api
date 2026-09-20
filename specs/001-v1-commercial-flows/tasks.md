@@ -92,7 +92,7 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T023 [P] [US2] Testar cadastro público sempre CLIENT, BCrypt custo 12 e login local válido/inválido em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/LocalAuthenticationIntegrationTest.kt`
 - [ ] T024 [P] [US2] Testar JWT válido/expirado/inválido, refresh rotativo, revogação e reuso em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/TokenIntegrationTest.kt`
 - [ ] T025 [P] [US2] Testar `GET /auth/csrf`, proteção seletiva de cookies e CORS configurado em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CsrfAndCorsIntegrationTest.kt`
-- [ ] T026 [P] [US2] Testar login/cadastro Google CLIENT, uso único do handoff e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
+- [ ] T026 [P] [US2] Testar endpoints OAuth nativos, callback padrão, login/cadastro Google CLIENT, uso único do handoff e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
 - [ ] T027 [P] [US2] Testar rate limiting 429 e garantir que tentativas válidas normais não são bloqueadas em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AuthenticationRateLimitIntegrationTest.kt`
 - [ ] T028 [P] [US2] Testar interesse idempotente, produto inativo, URL WhatsApp e criação exata do acompanhamento em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/InterestIntegrationTest.kt`
 
@@ -109,12 +109,12 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [ ] T037 [P] [US2] Implementar cookie de refresh opaco e hash seguro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/RefreshTokenCookie.kt`
 - [ ] T038 [P] [US2] Implementar limitador local de falhas de autenticação em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/AuthenticationRateLimiter.kt`
 - [ ] T039 [US2] Implementar cadastro, login, emissão, rotação, reuso e logout em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/AuthService.kt`
-- [ ] T040 [US2] Implementar OIDC CLIENT por sub, conflito de e-mail e handoff de uso único em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
-- [ ] T041 [US2] Implementar state com intenção protegida, callback único e handlers Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/GoogleLoginHandlers.kt`
-- [ ] T042 [US2] Completar SecurityConfiguration com BCrypt 12, Resource Server HMAC, CSRF seletivo, OAuth endpoints e regras CLIENT/ADMIN em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
+- [ ] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail e handoff de uso único em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
+- [ ] T041 [US2] Implementar success/failure handlers somente para o comportamento posterior ao OAuth e invalidar a sessão temporária em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/GoogleLoginHandlers.kt`
+- [ ] T042 [US2] Configurar cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Resource Server HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
 - [ ] T043 [P] [US2] Definir DTOs de cadastro, login, tokens e Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/AuthDtos.kt` e `CustomerDtos.kt`
 - [ ] T044 [US2] Implementar cadastro, login, refresh, logout e CSRF em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt` e `CustomerController.kt`
-- [ ] T045 [US2] Implementar dois inícios Google, callback por redirect, exchange e conclusão de cadastro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/GoogleAuthController.kt`
+- [ ] T045 [US2] Remover controller/resolver/repository de authorization request customizados e manter somente exchange e conclusão de cadastro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt`
 - [ ] T046 [US2] Implementar confirmação idempotente, URL WhatsApp e criação transacional do trio em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/InterestService.kt`
 - [ ] T047 [P] [US2] Adicionar DTO HAL do interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CustomerDtos.kt`
 - [ ] T048 [US2] Implementar `POST /products/{productId}/interests` com Location e links de produto/WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/InterestController.kt`
@@ -132,7 +132,7 @@ principal/ordem e status; catálogo reflete o estado e falha externa não public
 
 ### Tests for User Story 3
 
-- [ ] T049 [P] [US3] Testar Google ADMIN por sub autorizado, negação de outro sub e impossibilidade de promoção pública em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminAuthenticationIntegrationTest.kt`
+- [ ] T049 [P] [US3] Testar Google ADMIN exclusivamente por sub autorizado, tratamento dos demais como CLIENT e impossibilidade de promoção pública em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminAuthenticationIntegrationTest.kt`
 - [ ] T050 [P] [US3] Testar matriz anônimo/CLIENT/ADMIN e contrato HAL da gestão do catálogo em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminCatalogIntegrationTest.kt`
 - [ ] T051 [P] [US3] Testar upload, exclusão, compensação de falha e invariantes de imagem com fake MediaStorage em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/ProductMediaIntegrationTest.kt`
 
@@ -209,7 +209,7 @@ de criação ou conclusão de Reminder.
 - [ ] T075 Executar todos os cenários automatizáveis do quickstart e registrar ajustes necessários em `specs/001-v1-commercial-flows/quickstart.md`
 - [ ] T076 Executar `./mvnw clean test` com Docker/Testcontainers e corrigir regressões sem adicionar H2 em `pom.xml` e `src/test/`
 - [ ] T077 Revisar `src/main/kotlin/com/viniciusdevassis/laumileymodas/` e remover ports internos, adapters delegadores, modelos duplicados, mappers triviais, use cases unitários e helpers sem justificativa
-- [ ] T078 Confirmar ausência de Spring Session, ProblemDetail, JWT assimétrico, linking por e-mail, Reminder manual e referências a outros projetos em `src/`, `pom.xml` e `specs/001-v1-commercial-flows/`
+- [ ] T078 Confirmar ausência de callback/entradas Google customizados, ProblemDetail, JWT assimétrico, linking por e-mail, Reminder manual e referências a outros projetos em `src/`, `pom.xml` e `specs/001-v1-commercial-flows/`
 
 ## Dependencies & Execution Order
 

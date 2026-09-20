@@ -17,12 +17,11 @@ import java.util.Base64
 data class CreatedGoogleHandoff(val rawHandle: String, val purpose: OAuthHandoffPurpose)
 
 @Service
-class CompleteGoogleLoginUseCase(private val accounts: AccountRepository, private val identities: ExternalIdentityRepository, private val handoffs: OAuthHandoffRepository, private val ids: IdGenerator, private val clock: ClockProvider, @Value("\${laumiley.security.admin.google-sub}") private val adminSub: String, @Value("\${laumiley.security.admin.google-email}") private val adminEmail: String, @Value("\${laumiley.security.oauth-handoff.ttl:10m}") private val ttl: Duration) {
-	@Transactional fun execute(identity: VerifiedGoogleIdentity, adminIntent: Boolean): CreatedGoogleHandoff {
+class CompleteGoogleLoginUseCase(private val accounts: AccountRepository, private val identities: ExternalIdentityRepository, private val handoffs: OAuthHandoffRepository, private val ids: IdGenerator, private val clock: ClockProvider, @Value("\${laumiley.security.admin.google-sub}") private val adminSub: String, @Value("\${laumiley.security.oauth-handoff.ttl:10m}") private val ttl: Duration) {
+	@Transactional fun execute(identity: VerifiedGoogleIdentity): CreatedGoogleHandoff {
 		val now = clock.now(); val linked = identities.findGoogleBySubject(identity.subject)
 		val purpose: OAuthHandoffPurpose; val accountId: java.util.UUID?
-		if (adminIntent) {
-			if (identity.subject != adminSub || !identity.email.equals(adminEmail, true)) throw ApplicationException(AuthError.GOOGLE_ADMIN_NOT_ALLOWED)
+		if (identity.subject == adminSub) {
 			val account = if (linked != null) accounts.findById(linked.accountId)!! else {
 				if (accounts.findByNormalizedEmail(identity.email) != null) throw ApplicationException(AuthError.GOOGLE_EMAIL_CONFLICT)
 				val admin = accounts.save(Account(ids.newId(), identity.email, null, AccountRole.ADMIN, true, now, now))
@@ -31,7 +30,9 @@ class CompleteGoogleLoginUseCase(private val accounts: AccountRepository, privat
 			if (account.role != AccountRole.ADMIN) throw ApplicationException(AuthError.GOOGLE_ADMIN_NOT_ALLOWED)
 			purpose = OAuthHandoffPurpose.EXISTING_ACCOUNT_LOGIN; accountId = account.id
 		} else if (linked != null) {
-			purpose = OAuthHandoffPurpose.EXISTING_ACCOUNT_LOGIN; accountId = linked.accountId
+			val account = accounts.findById(linked.accountId) ?: throw ApplicationException(AuthError.INVALID_HANDOFF)
+			if (account.role == AccountRole.ADMIN) throw ApplicationException(AuthError.GOOGLE_ADMIN_NOT_ALLOWED)
+			purpose = OAuthHandoffPurpose.EXISTING_ACCOUNT_LOGIN; accountId = account.id
 		} else {
 			if (accounts.findByNormalizedEmail(identity.email) != null) throw ApplicationException(AuthError.GOOGLE_EMAIL_CONFLICT)
 			purpose = OAuthHandoffPurpose.CLIENT_REGISTRATION; accountId = null

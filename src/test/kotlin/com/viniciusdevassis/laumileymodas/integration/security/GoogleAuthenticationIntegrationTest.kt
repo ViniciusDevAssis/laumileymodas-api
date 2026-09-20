@@ -1,43 +1,152 @@
 package com.viniciusdevassis.laumileymodas.integration.security
 
-import com.viniciusdevassis.laumileymodas.application.auth.*
+import com.viniciusdevassis.laumileymodas.application.auth.AuthError
+import com.viniciusdevassis.laumileymodas.application.auth.CompleteGoogleCustomerRegistrationUseCase
+import com.viniciusdevassis.laumileymodas.application.auth.CompleteGoogleLoginUseCase
+import com.viniciusdevassis.laumileymodas.application.auth.ExchangeGoogleHandoffUseCase
 import com.viniciusdevassis.laumileymodas.application.common.ApplicationException
+import com.viniciusdevassis.laumileymodas.domain.account.OAuthHandoffPurpose
+import com.viniciusdevassis.laumileymodas.infrastructure.security.GoogleOAuthSuccessHandler
 import com.viniciusdevassis.laumileymodas.infrastructure.security.oauth.VerifiedGoogleIdentity
-import com.viniciusdevassis.laumileymodas.infrastructure.security.oauth.OAuthAuthorizationRequestCookieRepository
-import com.viniciusdevassis.laumileymodas.infrastructure.security.oauth.GoogleIntentAuthorizationRequestResolver
 import com.viniciusdevassis.laumileymodas.integration.support.Phase4IntegrationTest
-import org.assertj.core.api.Assertions.*
+import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.web.servlet.get
-import java.util.UUID
-import org.springframework.mock.web.*
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository
+import org.springframework.security.oauth2.core.oidc.OidcIdToken
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser
+import org.springframework.test.web.servlet.get
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 
-class GoogleAuthenticationIntegrationTest:Phase4IntegrationTest(){
-	@Autowired lateinit var complete:CompleteGoogleLoginUseCase
-	@Autowired lateinit var registration:CompleteGoogleCustomerRegistrationUseCase
-	@Autowired lateinit var exchange:ExchangeGoogleHandoffUseCase
-	@Autowired lateinit var authorizationRequests:OAuthAuthorizationRequestCookieRepository
-	@Autowired lateinit var clientRegistrations:ClientRegistrationRepository
-	@Autowired lateinit var googleAuthorizationResolver:GoogleIntentAuthorizationRequestResolver
+class GoogleAuthenticationIntegrationTest : Phase4IntegrationTest() {
+    @Autowired
+    lateinit var complete: CompleteGoogleLoginUseCase
 
-	@Test fun `novo cliente Google conclui cadastro e vinculo usa somente sub`() { val handoff=complete.execute(VerifiedGoogleIdentity("new-sub","google@test.com","Ana","Silva"),false);val pair=registration.execute(handoff.rawHandle,"Ana","Silva","+5511999999999");assertThat(pair.accessToken).isNotBlank();assertThat(jdbc.queryForObject("select subject from account_external_identity",String::class.java)).isEqualTo("new-sub");val again=complete.execute(VerifiedGoogleIdentity("new-sub","email-alterado@test.com",null,null),false);assertThat(exchange.execute(again.rawHandle).accountId).isEqualTo(pair.accountId) }
+    @Autowired
+    lateinit var registration: CompleteGoogleCustomerRegistrationUseCase
 
-	@Test fun `nao vincula sub inedito por coincidencia de email`() { val email=register("same@test.com");assertThatThrownBy{complete.execute(VerifiedGoogleIdentity("other-sub",email,null,null),false)}.isInstanceOfSatisfying(ApplicationException::class.java){assertThat(it.error).isEqualTo(AuthError.GOOGLE_EMAIL_CONFLICT)};assertThat(jdbc.queryForObject("select count(*) from account_external_identity",Long::class.java)).isZero() }
+    @Autowired
+    lateinit var exchange: ExchangeGoogleHandoffUseCase
 
-	@Test fun `somente sub e email Google configurados criam a unica admin`() { assertThatThrownBy{complete.execute(VerifiedGoogleIdentity("wrong","admin@example.test",null,null),true)}.isInstanceOf(ApplicationException::class.java);val handoff=complete.execute(VerifiedGoogleIdentity("test-admin-sub","admin@example.test",null,null),true);val tokens=exchange.execute(handoff.rawHandle);assertThat(tokens.accessToken).isNotBlank();assertThat(jdbc.queryForObject("select role from account where id=?",String::class.java,tokens.accountId)).isEqualTo("ADMIN") }
+    @Autowired
+    lateinit var clientRegistrations: ClientRegistrationRepository
 
-	@Test fun `pontos de inicio Google convergem para registration sem cookie de intencao separado`() { val client=mockMvc.get("/auth/google/client").andExpect{status{is3xxRedirection()}}.andReturn().response;val admin=mockMvc.get("/auth/google/admin").andExpect{status{is3xxRedirection()}}.andReturn().response;assertThat(client.redirectedUrl).startsWith("https://accounts.google.com/");assertThat(admin.redirectedUrl).startsWith("https://accounts.google.com/");assertThat(client.getHeaders("Set-Cookie")).noneMatch{it.contains("LAUMILEY_OAUTH_INTENT")};assertThat(client.redirectedUrl).doesNotContain("token","handoff") }
+    @Autowired
+    lateinit var successHandler: GoogleOAuthSuccessHandler
 
-	@Test fun `intencao fica vinculada ao state no authorization request cifrado`() { val response=mockMvc.get("/auth/google/admin").andExpect{status{is3xxRedirection()}}.andReturn().response;val cookie=response.getCookie("LAUMILEY_OAUTH_REQUEST")!!;assertThat(cookie.value).doesNotContain("ADMIN");val callback=MockHttpServletRequest().apply{setCookies(cookie)};val request=authorizationRequests.loadAuthorizationRequest(callback)!!;assertThat(request.state).isNotBlank();assertThat(request.attributes[OAuthAuthorizationRequestCookieRepository.INTENT_ATTRIBUTE]).isEqualTo("ADMIN");assertThat(callback.getAttribute(OAuthAuthorizationRequestCookieRepository.INTENT_ATTRIBUTE)).isEqualTo("ADMIN") }
+    @Test
+    fun `novo cliente Google conclui cadastro e vinculo usa somente sub`() {
+        val handoff = complete.execute(VerifiedGoogleIdentity("new-sub", "google@test.com", "Ana", "Silva"))
+        val pair = registration.execute(handoff.rawHandle, "Ana", "Silva", "+5511999999999")
 
-	@Test fun `resolver Google cria authorization request para os dois pontos de inicio`() { val client=MockHttpServletRequest().apply{requestURI="/auth/google/client";servletPath="/auth/google/client"};val admin=MockHttpServletRequest().apply{requestURI="/auth/google/admin";servletPath="/auth/google/admin"};val clientAuthorization=googleAuthorizationResolver.resolve(client)!!;authorizationRequests.saveAuthorizationRequest(clientAuthorization,client,MockHttpServletResponse());assertThat(clientAuthorization.attributes[OAuthAuthorizationRequestCookieRepository.INTENT_ATTRIBUTE]).isEqualTo("CLIENT");assertThat(googleAuthorizationResolver.resolve(admin)?.attributes?.get(OAuthAuthorizationRequestCookieRepository.INTENT_ATTRIBUTE)).isEqualTo("ADMIN") }
+        assertThat(pair.accessToken).isNotBlank()
+        assertThat(jdbc.queryForObject("select subject from account_external_identity", String::class.java))
+            .isEqualTo("new-sub")
 
-	@Test fun `callback configurado considera context path uma unica vez`() { assertThat(clientRegistrations.findByRegistrationId("google").redirectUri).isEqualTo("{baseUrl}/auth/google/callback");val response=mockMvc.get("/api/v1/auth/google/client") { contextPath = "/api/v1" }.andExpect{status{is3xxRedirection()}}.andReturn().response;assertThat(URLDecoder.decode(response.redirectedUrl,StandardCharsets.UTF_8)).contains("redirect_uri=http://localhost/api/v1/auth/google/callback").doesNotContain("/api/v1/api/v1/") }
+        val again = complete.execute(VerifiedGoogleIdentity("new-sub", "email-alterado@test.com", null, null))
+        assertThat(exchange.execute(again.rawHandle).accountId).isEqualTo(pair.accountId)
+    }
 
-	@Test fun `state nonce e authorization request permanecem cifrados em cookie temporario`() { val request=OAuth2AuthorizationRequest.authorizationCode().authorizationUri("https://accounts.google.com/o/oauth2/v2/auth").clientId("client").redirectUri("https://app.test/callback").state("state-secret").additionalParameters(mapOf("nonce" to "nonce-secret")).build();val response=MockHttpServletResponse();authorizationRequests.saveAuthorizationRequest(request,MockHttpServletRequest(),response);val cookie=response.getCookie("LAUMILEY_OAUTH_REQUEST")!!;assertThat(cookie.value).doesNotContain("state-secret","nonce-secret");val callback=MockHttpServletRequest().apply{setCookies(cookie)};assertThat(authorizationRequests.loadAuthorizationRequest(callback)!!.state).isEqualTo("state-secret") }
+    @Test
+    fun `nao vincula sub inedito por coincidencia de email`() {
+        val email = register("same@test.com")
+
+        assertThatThrownBy {
+            complete.execute(VerifiedGoogleIdentity("other-sub", email, null, null))
+        }.isInstanceOfSatisfying(ApplicationException::class.java) {
+            assertThat(it.error).isEqualTo(AuthError.GOOGLE_EMAIL_CONFLICT)
+        }
+        assertThat(jdbc.queryForObject("select count(*) from account_external_identity", Long::class.java)).isZero()
+    }
+
+    @Test
+    fun `somente o sub configurado cria a unica admin e os demais seguem como client`() {
+        val clientHandoff = complete.execute(
+            VerifiedGoogleIdentity("not-admin-sub", "cliente-google@test.com", "Cliente", "Google"),
+        )
+        assertThat(clientHandoff.purpose).isEqualTo(OAuthHandoffPurpose.CLIENT_REGISTRATION)
+        val clientTokens = registration.execute(
+            clientHandoff.rawHandle,
+            "Cliente",
+            "Google",
+            "+5511999999999",
+        )
+        assertThat(
+            jdbc.queryForObject("select role from account where id=?", String::class.java, clientTokens.accountId),
+        ).isEqualTo("CLIENT")
+
+        val adminHandoff = complete.execute(
+            VerifiedGoogleIdentity("test-admin-sub", "qualquer-email-admin@test.com", null, null),
+        )
+        val adminTokens = exchange.execute(adminHandoff.rawHandle)
+        assertThat(adminTokens.accessToken).isNotBlank()
+        assertThat(
+            jdbc.queryForObject("select role from account where id=?", String::class.java, adminTokens.accountId),
+        ).isEqualTo("ADMIN")
+    }
+
+    @Test
+    fun `endpoint nativo usa registration google e callback padrao com context path`() {
+        assertThat(clientRegistrations.findByRegistrationId("google").redirectUri)
+            .isEqualTo("{baseUrl}/{action}/oauth2/code/{registrationId}")
+
+        val result = mockMvc.get("http://localhost:8080/api/v1/oauth2/authorization/google") {
+            contextPath = "/api/v1"
+        }.andExpect {
+            status { is3xxRedirection() }
+        }.andReturn()
+
+        val redirect = URLDecoder.decode(result.response.redirectedUrl, StandardCharsets.UTF_8)
+        assertThat(redirect)
+            .startsWith("https://accounts.google.com/")
+            .contains("redirect_uri=http://localhost:8080/api/v1/login/oauth2/code/google")
+            .contains("scope=openid profile email")
+            .doesNotContain("/api/v1/api/v1/")
+        assertThat(result.request.getSession(false)).isNotNull()
+        assertThat(result.response.getCookie("LAUMILEY_OAUTH_REQUEST")).isNull()
+    }
+
+    @Test
+    fun `success handler decide papel pelo sub cria handoff e encerra sessao OAuth`() {
+        val request = MockHttpServletRequest().apply { getSession(true) }
+        val response = MockHttpServletResponse()
+
+        successHandler.onAuthenticationSuccess(
+            request,
+            response,
+            googleAuthentication("test-admin-sub", "owner@test.com"),
+        )
+
+        assertThat(response.redirectedUrl).isEqualTo("http://localhost:3000/auth/google/success")
+        assertThat(request.getSession(false)).isNull()
+        val handoff = response.getCookie("LAUMILEY_OAUTH_HANDOFF")
+        assertThat(handoff).isNotNull
+        val tokens = exchange.execute(handoff!!.value)
+        assertThat(jdbc.queryForObject("select role from account where id=?", String::class.java, tokens.accountId))
+            .isEqualTo("ADMIN")
+    }
+
+    private fun googleAuthentication(subject: String, email: String): OAuth2AuthenticationToken {
+        val now = Instant.now()
+        val idToken = OidcIdToken(
+            "google-id-token",
+            now,
+            now.plusSeconds(300),
+            mapOf(
+                "sub" to subject,
+                "email" to email,
+                "email_verified" to true,
+            ),
+        )
+        val authorities = listOf(SimpleGrantedAuthority("OIDC_USER"))
+        val user = DefaultOidcUser(authorities, idToken)
+        return OAuth2AuthenticationToken(user, authorities, "google")
+    }
 }

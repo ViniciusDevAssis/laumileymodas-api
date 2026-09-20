@@ -24,7 +24,8 @@ obrigatória é `MediaStorage`, implementada pelo adapter Cloudinary.
 **Persistence**: Spring Data JPA, PostgreSQL, Flyway; Hibernate `ddl-auto=validate`
 **Media**: Cloudinary por meio de `MediaStorage`
 **Testing**: JUnit 5, Spring Boot Test, Spring Security Test, Testcontainers PostgreSQL
-**Application type**: monólito REST stateless
+**Application type**: monólito REST; APIs stateless por Bearer JWT e sessão temporária somente no
+protocolo OAuth2 Login nativo
 **Performance**: sem limite quantitativo arbitrário na V1; consultas paginadas e índices orientados
 pelos acessos previstos
 **Deployment scope**: uma única instância na V1
@@ -56,7 +57,6 @@ src/main/kotlin/com/viniciusdevassis/laumileymodas/
 ├── presentation/
 │   ├── controllers/
 │   │   ├── AuthController.kt
-│   │   ├── GoogleAuthController.kt
 │   │   ├── CustomerController.kt
 │   │   ├── CatalogController.kt
 │   │   ├── InterestController.kt
@@ -214,7 +214,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 ### `GoogleAuthService`
 
 - validar identidade OIDC normalizada recebida do handler;
-- aplicar intenção CLIENT/ADMIN protegida;
+- decidir ADMIN exclusivamente quando `sub == ADMIN_GOOGLE_SUB`; demais identidades seguem CLIENT;
 - resolver vínculo exclusivamente por `provider + sub`;
 - rejeitar conflito de e-mail sem linking automático;
 - criar/consumir handoff de uso único;
@@ -276,21 +276,25 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 ### Google OIDC and ADMIN
 
 - escopos `openid profile email`;
-- entradas `/auth/google/client` e `/auth/google/admin` convergem para Google;
-- callback externo de desenvolvimento:
-  `http://localhost:8080/api/v1/auth/google/callback`;
-- `redirect-uri` é `{baseUrl}/auth/google/callback`; como `baseUrl` inclui o context path, a
-  configuração do redirection endpoint não repete `/api/v1`;
-- `state` protege CSRF OAuth e a intenção CLIENT/ADMIN;
+- um único registrationId `google` usa os endpoints padrão do Spring Security;
+- início: `/oauth2/authorization/google`;
+- callback processado pelo Spring: `/login/oauth2/code/google`;
+- externamente em desenvolvimento, com o context path, o callback é
+  `http://localhost:8080/api/v1/login/oauth2/code/google`;
+- não há configuração de `authorizationEndpoint`, `redirectionEndpoint` ou `redirect-uri`;
+- o `state` e a authorization request são geridos pelo mecanismo padrão do Spring;
+- uma cadeia OAuth permite sessão temporária `IF_REQUIRED` apenas durante o protocolo e os handlers
+  invalidam essa sessão; a cadeia da API permanece `STATELESS`;
 - `sub` administrativo vem exclusivamente de configuração secreta;
-- única ADMIN é criada/resolvida somente no fluxo administrativo autorizado;
+- a única ADMIN é criada/resolvida somente quando o `sub` validado coincide com a configuração;
 - cadastro público nunca aceita papel;
 - URLs de frontend são allowlist fixa em configuração; não há redirect arbitrário;
+- success/failure handlers customizam somente o comportamento após autenticação;
 - handoff de uso único fica em cookie e seu hash no banco; nenhum token vai na URL.
 
 ### Authorization, CORS and errors
 
-- `/products/**`, cadastro, login, CSRF e entradas/callback Google são públicos conforme contrato;
+- `/products/**`, cadastro, login, CSRF e endpoints OAuth padrão são públicos conforme contrato;
 - interesse e consentimento exigem `CLIENT`;
 - `/admin/**` exige `ADMIN` na URL e, quando útil, method security;
 - CORS usa origens configuradas por ambiente, nunca `*` com credenciais;

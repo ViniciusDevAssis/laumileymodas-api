@@ -108,31 +108,24 @@ paths:
             Set-Cookie: { schema: { type: string } }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /auth/google/client:
+  /oauth2/authorization/google:
     get:
       tags: [Auth]
-      summary: Inicia OIDC Google com intenção CLIENT protegida
-      operationId: startGoogleClientLogin
+      summary: Inicia o OAuth2 Login Google pelo endpoint nativo do Spring Security
+      operationId: startGoogleLogin
+      description: Usa o único registrationId `google` e os escopos openid, profile e email.
       responses:
         '302': { $ref: '#/components/responses/OAuthRedirect' }
 
-  /auth/google/admin:
+  /login/oauth2/code/google:
     get:
       tags: [Auth]
-      summary: Inicia OIDC Google com intenção ADMIN protegida
-      operationId: startGoogleAdminLogin
-      responses:
-        '302': { $ref: '#/components/responses/OAuthRedirect' }
-
-  /auth/google/callback:
-    get:
-      tags: [Auth]
-      summary: Callback único do Google OIDC
-      operationId: googleCallback
+      summary: Callback padrão processado pelo Spring Security
+      operationId: processGoogleLoginCallback
       description: |
-        Valida state, identidade Google e intenção. Cria handoff opaco de uso único em cookie
-        HttpOnly e redireciona somente para uma URL de frontend configurada. Nunca retorna tokens
-        na URL nem faz account linking apenas por e-mail.
+        O Spring valida state, troca o authorization code e autentica o OIDC user. Depois disso,
+        o success handler resolve o comportamento local pelo sub, cria um handoff opaco de uso
+        único e redireciona somente para URL configurada. Tokens não aparecem na URL.
       parameters:
         - name: code
           in: query

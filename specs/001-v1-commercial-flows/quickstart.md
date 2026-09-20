@@ -53,11 +53,12 @@ credenciais.
 No cliente Google, registre exatamente este callback de desenvolvimento:
 
 ```text
-http://localhost:8080/api/v1/auth/google/callback
+http://localhost:8080/api/v1/login/oauth2/code/google
 ```
 
-O context path `/api/v1` já faz parte de `{baseUrl}`. A configuração interna usa
-`{baseUrl}/auth/google/callback` e não repete o prefixo.
+O context path `/api/v1` já faz parte de `{baseUrl}`. O template padrão do Spring Boot resolve
+`{action}` como `login` e produz a URL acima; não configure `redirect-uri` nem
+`redirectionEndpoint` customizados.
 
 ## 2. Execute os testes
 
@@ -149,16 +150,23 @@ Após autenticação ou logout, obtenha novo token CSRF quando o Spring limpar o
 
 ## 7. Valide Google OIDC
 
-No navegador, valide separadamente:
+No navegador, inicie sempre pelo endpoint nativo:
 
-1. `/api/v1/auth/google/client` com cliente já vinculado;
+```text
+http://localhost:8080/api/v1/oauth2/authorization/google
+```
+
+Valide separadamente:
+
+1. cliente cujo `sub` já está vinculado;
 2. novo cliente Google, que retorna à rota configurada para completar nome, sobrenome e WhatsApp;
 3. e-mail já existente com `sub` Google ainda não vinculado, que deve ir para erro sem linking;
-4. `/api/v1/auth/google/admin` com `sub` diferente do configurado, que deve ser negado;
-5. o mesmo fluxo com o `sub` configurado, que autentica a única ADMIN.
+4. conta cujo `sub` difere de `LAUMILEY_ADMIN_GOOGLE_SUB`, que segue sempre como CLIENT;
+5. conta cujo `sub` coincide com a configuração, que autentica a única ADMIN.
 
-Os dois inícios convergem para o registration Google e o callback único. O callback nunca exibe
-JSON: cria handoff opaco em cookie e redireciona para URL fixa do frontend. O frontend chama
+O Spring Security gera a authorization request e processa o callback padrão
+`/api/v1/login/oauth2/code/google`. O success handler apenas resolve o comportamento local, cria
+handoff opaco em cookie e redireciona para URL fixa do frontend. O frontend chama
 `POST /auth/google/exchange` ou `POST /auth/google/customers` com cookie e CSRF. Access token,
 refresh token, identidade Google e handoff não aparecem na URL.
 
