@@ -27,7 +27,7 @@ modelos duplicados, mappers triviais ou uma classe por operação. A única inte
 - [X] T001 Remover a implementação, testes e migrations gerados pelas fases anteriores em `src/main/kotlin/com/viniciusdevassis/laumileymodas/`, `src/test/kotlin/com/viniciusdevassis/laumileymodas/` e `src/main/resources/db/migration/`, preservando `LaumileyModasApiApplication.kt`
 - [X] T002 Atualizar dependências para Web, Validation, Security, OAuth2 Client/Resource Server, Data JPA, Flyway, PostgreSQL, Cloudinary, Spring HATEOAS e dependências de teste em `pom.xml`
 - [X] T003 Configurar datasource externo, Flyway, Hibernate validate, context path e limites multipart em `src/main/resources/application.yaml`
-- [X] T004 Configurar propriedades tipadas mínimas de frontend, segurança, Cloudinary, mídia e WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/config/ApplicationProperties.kt`
+- [X] T004 Manter configurações mínimas de frontend, segurança, Cloudinary, mídia e WhatsApp em `src/main/resources/application.yaml`, usando `@Value` diretamente nas classes que precisarem desses valores
 - [X] T005 [P] Criar configuração de teste com PostgreSQL Testcontainers em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/PostgresIntegrationTest.kt` e `src/test/resources/application-test.yaml`
 - [X] T006 Verificar que o baseline compila e que o contexto de teste inicia sem H2 em `src/test/kotlin/com/viniciusdevassis/laumileymodas/LaumileyModasApiApplicationTests.kt`
 
@@ -211,7 +211,7 @@ de criação ou conclusão de Reminder.
 - [ ] T075 Executar todos os cenários automatizáveis do quickstart e registrar ajustes necessários em `specs/001-v1-commercial-flows/quickstart.md`
 - [ ] T076 Executar `./mvnw clean test` com Docker/Testcontainers e corrigir regressões sem adicionar H2 em `pom.xml` e `src/test/`
 - [ ] T077 Revisar `src/main/kotlin/com/viniciusdevassis/laumileymodas/` e remover ports internos, adapters delegadores, modelos duplicados, mappers triviais, use cases unitários e helpers sem justificativa
-- [ ] T078 Confirmar ausência de callback/entradas Google customizados, ProblemDetail, JWT assimétrico, linking por e-mail, Reminder manual e referências a outros projetos em `src/`, `pom.xml` e `specs/001-v1-commercial-flows/`
+- [ ] T078 Confirmar ausência de callback/entradas Google customizados, ProblemDetail, JWT assimétrico, linking por e-mail, Reminder manual, `ApplicationProperties` e referências a outros projetos em `src/`, `pom.xml` e `specs/001-v1-commercial-flows/`
 
 ## Dependencies & Execution Order
 

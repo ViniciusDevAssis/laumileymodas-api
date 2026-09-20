@@ -47,7 +47,6 @@ infrastructure/
   repositories/
   security/
   cloudinary/
-  config/
 ```
 
 **Rationale**: esses services correspondem a contextos funcionais reais. Novos services ou helpers
@@ -58,7 +57,22 @@ uma classe vive comunica responsabilidade; ela não cria uma barreira arquitetur
 por feature com cópias das quatro camadas; ambos foram rejeitados na V1 por multiplicarem arquivos
 sem melhorar o comportamento.
 
-## 3. REST e hipermídia
+## 3. Configuração da aplicação
+
+**Decision**: manter as configurações em `src/main/resources/application.yaml` e injetar valores
+diretamente nas classes que precisam deles com `@Value`, preferencialmente por construtor.
+Não criar `ApplicationProperties`, outra classe central com `@ConfigurationProperties` ou estrutura
+equivalente na V1 sem nova decisão explícita.
+
+**Rationale**: a V1 é uma aplicação monolítica simples e ainda pequena. Uma classe central de
+propriedades adiciona estrutura antes de existir complexidade suficiente para compensar esse custo.
+`application.yaml` preserva a visibilidade das variáveis e `@Value` mantém a dependência de
+configuração próxima do ponto real de uso.
+
+**Alternatives considered**: `ApplicationProperties`/`@ConfigurationProperties` foi rejeitado para
+esta V1 por antecipar uma organização que ainda não é necessária.
+
+## 4. REST e hipermídia
 
 **Decision**: modelar URLs com recursos e semântica HTTP; adicionar Spring HATEOAS e representar
 recursos com `EntityModel`, coleções paginadas com `PagedModel` e mídia `application/hal+json`.
@@ -86,7 +100,7 @@ início foi rejeitado por cerimônia; JSON sem links foi rejeitado pela decisão
 
 Referência: [Spring HATEOAS](https://docs.spring.io/spring-hateoas/docs/current/reference/html/).
 
-## 4. Persistência e modelo
+## 5. Persistência e modelo
 
 **Decision**: usar entidades JPA como modelo central, repositories Spring Data diretos, PostgreSQL,
 Flyway como autoridade do schema e Hibernate com `ddl-auto=validate`.
@@ -98,7 +112,7 @@ dependem do tempo recebem `java.time.Clock` diretamente no service correspondent
 **Alternatives considered**: `EntityManager` encapsulado em adapters, DAOs manuais e H2 foram
 rejeitados. Testes de integração usam o mesmo PostgreSQL da produção por Testcontainers.
 
-## 5. Acompanhamento do interesse
+## 6. Acompanhamento do interesse
 
 **Decision**: a confirmação idempotente de um `Interest` cria, na mesma transação, exatamente um
 `Reminder` e um `ContactRecord PENDING`. `Reminder.interest_id` e
@@ -113,7 +127,7 @@ transação. Não há endpoint nem service para criar ou concluir Reminder isola
 rejeitado por circularidade; eventos ou mensageria foram rejeitados porque a consistência precisa
 ser imediata dentro de um único monólito.
 
-## 6. Imagens e Cloudinary
+## 7. Imagens e Cloudinary
 
 **Decision**: manter somente a interface `MediaStorage` na aplicação e uma implementação
 `CloudinaryMediaStorage` na infraestrutura. `ProductMediaService` coordena upload/exclusão e
@@ -134,7 +148,7 @@ produto retornam as URLs ordenadas.
 **Alternatives considered**: SDK do Cloudinary dentro da entidade/service, upload direto do
 frontend e microsserviço de mídia foram rejeitados pela Constitution.
 
-## 7. Autenticação local e access token
+## 8. Autenticação local e access token
 
 **Decision**: usar Spring Security stateless, `@EnableMethodSecurity`, BCrypt via
 `DelegatingPasswordEncoder` com custo 12 e access token JWT curto assinado com HMAC SHA-256 por um
@@ -150,7 +164,7 @@ os tokens; sessão de servidor foi rejeitada porque a API é stateless.
 
 Referência: [Spring Security JWT](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
 
-## 8. Refresh token, logout e CSRF
+## 9. Refresh token, logout e CSRF
 
 **Decision**: usar refresh token opaco, aleatório e de alta entropia. Apenas seu hash é persistido.
 O token fica em cookie `HttpOnly`, `Secure` em produção, `SameSite` configurável e restrito a
@@ -170,7 +184,7 @@ necessário porque o navegador envia cookies automaticamente.
 
 Referência: [Spring Security CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
 
-## 9. Google OpenID Connect
+## 10. Google OpenID Connect
 
 **Decision**: usar OAuth2 Login/OIDC nativo do Spring Security com um único registrationId `google`
 e escopos `openid`, `profile` e `email`. O login começa em
@@ -205,7 +219,7 @@ fornecida pelo cliente foram rejeitados por complexidade ou risco desnecessário
 
 Referência: [Spring Security OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html).
 
-## 10. CORS e ambientes
+## 11. CORS e ambientes
 
 **Decision**: CORS é centralizado no Spring Security. Desenvolvimento aceita apenas as origens
 locais configuradas; produção exige lista explícita do domínio oficial. Nunca se combina origem
@@ -214,7 +228,7 @@ curinga com credenciais. As configurações variam por ambiente sem duplicar reg
 **Rationale**: mantém o desenvolvimento simples e torna a restrição de produção explícita antes da
 publicação.
 
-## 11. Rate limiting
+## 12. Rate limiting
 
 **Decision**: implementar um limitador em memória para tentativas falhas de autenticação, adequado à
 única instância da V1. A chave combina origem e identificador normalizado sem registrar senha. Uma
@@ -224,7 +238,7 @@ autenticação bem-sucedida limpa o contador aplicável; excesso retorna `429` n
 **Rationale**: protege o login sem Redis ou infraestrutura distribuída. A limitação é documentada
 como local à instância e pode evoluir somente se houver múltiplas instâncias.
 
-## 12. Erros
+## 13. Erros
 
 **Decision**: usar catálogos `ApiError` com códigos globalmente únicos, uma `ApiException` com status
 e erro, `GlobalExceptionHandler` e `ApiErrorResponse`. Validação, `AuthenticationEntryPoint` e
@@ -234,7 +248,7 @@ e sem detalhes internos.
 **Rationale**: um contrato único simplifica clientes e mantém mensagens seguras. Não há hierarquia
 de exceptions por camada nem RFC ProblemDetail.
 
-## 13. WhatsApp
+## 14. WhatsApp
 
 **Decision**: `InterestService` monta a URL `https://wa.me/{numero}?text={texto}` usando número e
 template configurados, codifica os parâmetros e inclui apenas identificação do produto. Não existe
@@ -242,7 +256,7 @@ template configurados, codifica os parâmetros e inclui apenas identificação d
 
 **Rationale**: a V1 só redireciona; não usa WhatsApp Business API nem envia mensagens.
 
-## 14. Testes
+## 15. Testes
 
 **Decision**: testes unitários cobrem regras puras com valor real; testes de integração com
 PostgreSQL Testcontainers cobrem migrations, repositories, transações, segurança, REST/HATEOAS e
@@ -260,6 +274,7 @@ ou camadas.
 - modelos de domínio e persistência duplicados;
 - mappers triviais;
 - `ClockProvider`, `IdGenerator` e `WhatsappLinkGenerator`;
+- `ApplicationProperties` ou classe central equivalente de configuração;
 - uma classe de use case ou comando por operação;
 - referência circular entre `Reminder` e `ContactRecord`;
 - metas p95 sem requisito de negócio;

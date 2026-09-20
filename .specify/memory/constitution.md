@@ -118,6 +118,12 @@ parte de uma regra; UUIDs PODEM ser gerados diretamente pela aplicação ou pers
 abstração adicional exige um segundo comportamento real, um limite externo ou uma regra que ela
 torne materialmente mais clara.
 
+Configurações da V1 DEVEM permanecer declaradas em `src/main/resources/application.yaml`. Quando
+uma classe precisar de um valor configurável, ela DEVE recebê-lo diretamente, preferencialmente por
+injeção de construtor com `@Value`. Uma classe central de propriedades, como `ApplicationProperties`
+ou estrutura equivalente com `@ConfigurationProperties`, NÃO DEVE ser criada sem autorização
+explícita do responsável pelo projeto.
+
 ### VIII. Banco de Dados Versionado
 
 Toda alteração estrutural do banco de dados DEVE ser registrada em uma migration versionada.

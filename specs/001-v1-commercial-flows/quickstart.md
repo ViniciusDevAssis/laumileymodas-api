@@ -265,4 +265,4 @@ A implementação está pronta quando:
 - os cenários acima respeitam o OpenAPI e os links HAL;
 - os requisitos funcionais permanecem cobertos sem estruturas excluídas no research;
 - não existem Spring Session, H2, ProblemDetail, linking por e-mail, Reminder manual, ports internos,
-  entidades duplicadas ou mappers triviais.
+  entidades duplicadas, mappers triviais ou `ApplicationProperties`.

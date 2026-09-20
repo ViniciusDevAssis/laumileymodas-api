@@ -114,7 +114,7 @@ src/main/kotlin/com/viniciusdevassis/laumileymodas/
     ├── cloudinary/
     │   └── CloudinaryMediaStorage.kt
     └── config/
-        └── ApplicationProperties.kt
+        └── TimeConfiguration.kt
 
 src/main/resources/
 ├── application.yaml
@@ -163,7 +163,8 @@ classes.
 - repositories são interfaces Spring Data, sem adapters intermediários;
 - security contém configuração e detalhes Spring Security/OIDC/JWT;
 - Cloudinary implementa `MediaStorage` e converte respostas do SDK para resultado simples;
-- configuração externa mapeia propriedades tipadas.
+- configurações permanecem em `application.yaml`; classes recebem valores por `@Value` quando
+  necessário, preferencialmente por construtor.
 
 ## REST and HATEOAS Strategy
 
@@ -384,6 +385,9 @@ Variáveis externas principais:
 - limites de mídia e autenticação.
 
 Segredos não possuem valor real padrão e não são versionados. O quickstart lista os nomes exatos.
+Não haverá `ApplicationProperties`, classe central com `@ConfigurationProperties` ou estrutura
+equivalente na V1 sem nova autorização. Valores configuráveis devem ficar visíveis em
+`application.yaml` e ser injetados diretamente onde forem usados.
 
 ## Delivery Strategy
 
