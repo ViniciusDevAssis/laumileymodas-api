@@ -60,7 +60,7 @@ class AuthServiceIntegrationTest(
 	fun `login local emite access token e persiste somente hash do refresh token`() {
 		val account = registeredAccount("login@example.com", "senha-correta")
 
-		val tokens = authService.login(" LOGIN@example.com ", "senha-correta")
+		val tokens = authService.login(" LOGIN@example.com ", "senha-correta", "127.0.0.1")
 		val persisted = refreshTokenRepository.findAll().single()
 		val jwt = tokenService.validate(tokens.accessToken)
 
@@ -76,7 +76,7 @@ class AuthServiceIntegrationTest(
 		registeredAccount("falha@example.com", "senha-correta")
 
 		assertThrows<ApiException> {
-			authService.login("falha@example.com", "senha-errada")
+			authService.login("falha@example.com", "senha-errada", "127.0.0.1")
 		}
 
 		assertTrue(refreshTokenRepository.findAll().isEmpty())
@@ -85,7 +85,7 @@ class AuthServiceIntegrationTest(
 	@Test
 	fun `refresh consome token anterior e emite novo par de tokens na mesma familia`() {
 		registeredAccount("refresh@example.com", "senha-correta")
-		val first = authService.login("refresh@example.com", "senha-correta")
+		val first = authService.login("refresh@example.com", "senha-correta", "127.0.0.1")
 
 		val second = authService.refresh(first.refreshToken)
 		val persisted = refreshTokenRepository.findAll().sortedBy { it.createdAt }
@@ -100,7 +100,7 @@ class AuthServiceIntegrationTest(
 	@Test
 	fun `reuso de refresh token consumido revoga familia`() {
 		registeredAccount("reuso@example.com", "senha-correta")
-		val first = authService.login("reuso@example.com", "senha-correta")
+		val first = authService.login("reuso@example.com", "senha-correta", "127.0.0.1")
 		authService.refresh(first.refreshToken)
 
 		assertThrows<ApiException> {
@@ -113,7 +113,7 @@ class AuthServiceIntegrationTest(
 	@Test
 	fun `logout revoga refresh token informado`() {
 		registeredAccount("logout@example.com", "senha-correta")
-		val tokens = authService.login("logout@example.com", "senha-correta")
+		val tokens = authService.login("logout@example.com", "senha-correta", "127.0.0.1")
 
 		authService.logout(tokens.refreshToken)
 

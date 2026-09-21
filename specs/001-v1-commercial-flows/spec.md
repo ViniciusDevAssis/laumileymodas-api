@@ -19,6 +19,8 @@ administração do catálogo e CRM inicial para a Laumiley Modas.
 - Q: Existem lembretes criados ou concluídos manualmente na V1? → A: Não. Todo `Reminder` é criado automaticamente com
   um `ContactRecord` pendente após um `Interest` confirmado e só é concluído quando a administradora completa e finaliza
   o `ContactRecord` correspondente.
+- Q: O telefone/WhatsApp é obrigatório no cadastro Google? → A: Não. O login/cadastro Google pode ser concluído sem
+  telefone; o cliente poderá informar esse dado posteriormente.
 
 ## User Scenarios & Testing
 
@@ -202,7 +204,8 @@ clientes, do interesse confirmado e do contexto comercial já registrado.
 
 * **FR-007**: O sistema DEVE permitir que um visitante crie uma conta de cliente.
 * **FR-008**: O cadastro tradicional DEVE exigir nome, sobrenome, e-mail, senha e telefone/WhatsApp. O cadastro pelo
-  Google DEVE exigir nome, sobrenome, e-mail verificado pelo provedor e telefone/WhatsApp, sem exigir senha local.
+  Google DEVE exigir nome, sobrenome e e-mail verificado pelo provedor, sem exigir senha local ou telefone/WhatsApp.
+  O telefone/WhatsApp poderá ser informado posteriormente.
 * **FR-009**: Os dados coletados no cadastro DEVEM ser utilizados apenas para identificação, autenticação e
   relacionamento comercial previsto na V1.
 * **FR-010**: O sistema DEVE permitir que um cliente cadastrado se autentique posteriormente.

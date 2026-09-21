@@ -126,7 +126,8 @@ src/main/resources/
 └── db/migration/
     ├── V1__create_catalog.sql
     ├── V2__create_accounts_and_customers.sql
-    └── V3__create_interests_and_crm.sql
+    ├── V3__create_interests_and_crm.sql
+    └── V4__allow_google_customers_without_phone.sql
 
 src/test/kotlin/com/viniciusdevassis/laumileymodas/
 ├── integration/
@@ -196,6 +197,8 @@ O modelo completo está em [data-model.md](./data-model.md). Decisões principai
 - `Account` possui papel imutável `CLIENT` ou `ADMIN`; cadastro público sempre cria `CLIENT`;
 - `AccountExternalIdentity(provider, subject)` identifica Google sem linking por e-mail;
 - `Customer` contém dados comerciais e estado do consentimento;
+- `Customer.whatsappPhone` é obrigatório no cadastro tradicional e pode ser nulo no cadastro Google;
+- cliente autenticado pode informar ou substituir seu próprio WhatsApp;
 - `Product 1:N ProductImage`, com URL, `externalId`, principal e ordem;
 - `Interest` tem chave idempotente única por cliente;
 - `Reminder.interest_id` e `ContactRecord.interest_id` são únicos e compartilham o mesmo interesse;
@@ -205,8 +208,8 @@ O modelo completo está em [data-model.md](./data-model.md). Decisões principai
   mínimo temporário.
 
 As migrations mantêm FKs, uniques, checks e índices necessários. Migrations aplicadas não são
-reescritas em ambientes compartilhados; durante a reconstrução local anterior ao primeiro release,
-o histórico ainda pode ser recriado de forma limpa conforme a execução das tasks.
+reescritas em ambientes compartilhados; a opcionalidade do telefone Google evolui por V4, preservando
+V2.
 
 ## Service Responsibilities
 
@@ -216,7 +219,8 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 - login por e-mail/senha com rate limiting;
 - emissão de access token e refresh opaco;
 - rotação, detecção de reuso, revogação e logout;
-- consulta e substituição do consentimento do cliente.
+- consulta e substituição do consentimento do cliente;
+- consulta do próprio perfil e atualização do WhatsApp opcional.
 
 ### `GoogleAuthService`
 
@@ -225,7 +229,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 - resolver vínculo exclusivamente por `provider + sub`;
 - rejeitar conflito de e-mail sem linking automático;
 - criar/resolver Account e AccountExternalIdentity pelo `sub` do Google sem linking automático por e-mail;
-- concluir cadastro Google ou login e delegar emissão de tokens ao `AuthService`.
+- criar/resolver o `Account` e, para CLIENT, o `Customer` diretamente no callback; delegar emissão de tokens ao `AuthService`.
 
 ### `CatalogService`
 
@@ -298,6 +302,7 @@ o histórico ainda pode ser recriado de forma limpa conforme a execução das ta
 - URLs de frontend são allowlist fixa em configuração; não há redirect arbitrário;
 - success/failure handlers customizam somente o comportamento após autenticação;
 - o success handler cria refresh token HttpOnly e redireciona para URL fixa do frontend; nenhum token vai na URL.
+- novo cadastro Google usa nome e e-mail verificado do perfil OIDC; o telefone pode ser informado posteriormente.
 
 ### Authorization, CORS and errors
 

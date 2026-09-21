@@ -73,7 +73,7 @@ Derived state:
 
 Rotação consome o atual e cria outro na mesma família. Reuso de um token consumido revoga todos os
 tokens ainda ativos da família.
-`n## `Customer`
+## `Customer`
 
 Dados comerciais do cliente.
 
@@ -83,7 +83,7 @@ Dados comerciais do cliente.
 | `accountId` | UUID | FK Account, unique, obrigatório |
 | `firstName` | varchar(120) | obrigatório |
 | `lastName` | varchar(120) | obrigatório |
-| `whatsappPhone` | varchar(20) | E.164, obrigatório |
+| `whatsappPhone` | varchar(20) | E.164; obrigatório no cadastro tradicional e opcional no cadastro Google |
 | `proactiveContactAuthorized` | boolean | obrigatório, default false |
 | `consentGrantedAt` | instant | nullable |
 | `consentRevokedAt` | instant | nullable |
@@ -93,6 +93,8 @@ Dados comerciais do cliente.
 Rules:
 
 - consentimento começa `false` e depende de ação afirmativa;
+- WhatsApp é obrigatório no cadastro tradicional e pode ficar nulo no cadastro Google até o cliente informá-lo posteriormente;
+- cliente autenticado pode informar ou substituir seu próprio WhatsApp;
 - concessão e revogação são idempotentes;
 - revogação não altera autenticação, histórico, interesses ou lembretes de atendimento solicitado.
 
@@ -288,6 +290,7 @@ ACTIVE -- time passes --> EXPIRED (derived)
 1. `V1__create_catalog.sql`
 2. `V2__create_accounts_and_customers.sql`
 3. `V3__create_interests_and_crm.sql`
+4. `V4__allow_google_customers_without_phone.sql` torna o telefone opcional sem reescrever V2.
 
 Cada migration inclui suas constraints e índices diretamente relacionados. Não existe migration
 separada apenas para criar estrutura cerimonial. Depois de aplicada em ambiente compartilhado, uma

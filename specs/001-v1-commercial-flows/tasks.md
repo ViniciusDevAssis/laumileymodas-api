@@ -71,7 +71,7 @@ válida.
 
 - [X] T016 [US1] Criar tabelas category, product e product_image com FKs, checks e índices em `src/main/resources/db/migration/V1__create_catalog.sql`
 - [X] T017 [P] [US1] Implementar entidades JPA `Category`, `Product` e `ProductImage` com invariantes de ativação/imagem principal em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/entities/Category.kt`, `Product.kt` e `ProductImage.kt`
-- [X] T018 [P] [US1] Definir `ProductStatus` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/Role.kt`, `Provider.kt`, `FollowUpStatus.kt` e `ContactChannel.kt`
+- [X] T018 [P] [US1] Definir `ProductStatus` em `src/main/kotlin/com/viniciusdevassis/laumileymodas/domain/enums/ProductStatus.kt`
 - [X] T019 [US1] Criar repositories Spring Data e consultas paginadas de produtos ativos em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/repositories/CategoryRepository.kt` e `ProductRepository.kt`
 - [X] T020 [US1] Implementar consultas públicas coesas em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
 - [X] T021 [P] [US1] Definir DTOs públicos de produto/categoria/imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CatalogDtos.kt`
@@ -91,12 +91,12 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Testar cadastro público sempre CLIENT, BCrypt custo 12 e login local válido/inválido em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/LocalAuthenticationIntegrationTest.kt`
-- [ ] T024 [P] [US2] Testar JWT válido/expirado/inválido, refresh rotativo, revogação e reuso em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/TokenIntegrationTest.kt`
-- [ ] T025 [P] [US2] Testar `GET /auth/csrf`, proteção seletiva de cookies e CORS configurado em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CsrfAndCorsIntegrationTest.kt`
-- [ ] T026 [P] [US2] Testar endpoints OAuth nativos, callback padrão, login/cadastro Google CLIENT, refresh cookie pós-callback e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
-- [ ] T027 [P] [US2] Testar rate limiting 429 e garantir que tentativas válidas normais não são bloqueadas em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AuthenticationRateLimitIntegrationTest.kt`
-- [ ] T028 [P] [US2] Testar interesse idempotente, produto inativo, URL WhatsApp e criação exata do acompanhamento em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/InterestIntegrationTest.kt`
+- [X] T023 [P] [US2] Testar cadastro público sempre CLIENT, BCrypt custo 12 e login local válido/inválido em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/LocalAuthenticationIntegrationTest.kt`
+- [X] T024 [P] [US2] Testar JWT válido/expirado/inválido, refresh rotativo, revogação e reuso em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/TokenIntegrationTest.kt`
+- [X] T025 [P] [US2] Testar `GET /auth/csrf`, proteção seletiva de cookies e CORS configurado em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/CsrfAndCorsIntegrationTest.kt`
+- [X] T026 [P] [US2] Testar endpoints OAuth nativos, callback padrão, login/cadastro Google CLIENT, refresh cookie pós-callback e conflito de e-mail sem linking em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/GoogleClientAuthenticationIntegrationTest.kt`
+- [X] T027 [P] [US2] Testar rate limiting 429 e garantir que tentativas válidas normais não são bloqueadas em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AuthenticationRateLimitIntegrationTest.kt`
+- [X] T028 [P] [US2] Testar interesse idempotente, produto inativo, URL WhatsApp e criação exata do acompanhamento em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/InterestIntegrationTest.kt`
 
 ### Implementation for User Story 2
 
@@ -111,15 +111,15 @@ e o PostgreSQL contém exatamente um Reminder e um ContactRecord PENDING para o 
 - [X] T037 [P] [US2] Implementar cookie de refresh opaco e hash seguro em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/RefreshTokenCookie.kt`
 - [X] T038 [P] [US2] Implementar limitador local de falhas de autenticação em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/AuthenticationRateLimiter.kt`
 - [X] T039 [US2] Implementar cadastro, login, emissão, rotação, reuso e logout em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/AuthService.kt`
-- [ ] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail sem linking automático e criação/resolução direta de Account em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
-- [ ] T041 [US2] Implementar `OAuth2SuccessHandler` somente para o comportamento posterior ao OAuth em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/OAuth2SuccessHandler.kt`
-- [ ] T042 [US2] Configurar SecurityFilter, CustomUserDetailsService e cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Bearer JWT HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
-- [ ] T043 [P] [US2] Definir DTOs de cadastro, login, tokens e Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/AuthDtos.kt` e `CustomerDtos.kt`
-- [ ] T044 [US2] Implementar cadastro, login, refresh, logout e CSRF em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt` e `CustomerController.kt`
-- [ ] T045 [US2] Manter o OAuth no fluxo nativo do Spring Security, sem controller/resolver/repository de authorization request customizados, sem expor exchange, conclusão de cadastro Google ou callback customizado em controller
-- [ ] T046 [US2] Implementar confirmação idempotente, URL WhatsApp e criação transacional do trio em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/InterestService.kt`
-- [ ] T047 [P] [US2] Adicionar DTO HAL do interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/CustomerDtos.kt`
-- [ ] T048 [US2] Implementar `POST /products/{productId}/interests` com Location e links de produto/WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/InterestController.kt`
+- [X] T040 [US2] Implementar OIDC por sub, ADMIN somente por ADMIN_GOOGLE_SUB, conflito de e-mail sem linking automático, criação/resolução direta de Account/Customer e migration V4 para WhatsApp opcional no cadastro Google em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt` e `src/main/resources/db/migration/V4__allow_google_customers_without_phone.sql`
+- [X] T041 [US2] Implementar `OAuth2SuccessHandler` somente para o comportamento posterior ao OAuth em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/OAuth2SuccessHandler.kt`
+- [X] T042 [US2] Configurar SecurityFilter, CustomUserDetailsService e cadeias Security OAuth/API com endpoints OAuth nativos, BCrypt 12, Bearer JWT HMAC e CSRF seletivo sem redirectionEndpoint customizado em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/security/SecurityConfiguration.kt`
+- [X] T043 [P] [US2] Definir DTOs de cadastro, login, tokens, cliente e interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/AuthDtos.kt`, `CustomerDtos.kt` e `InterestDtos.kt`
+- [X] T044 [US2] Implementar cadastro, consulta do perfil, atualização do próprio WhatsApp, login, refresh, logout e CSRF em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AuthController.kt` e `CustomerController.kt`
+- [X] T045 [US2] Manter o OAuth no fluxo nativo do Spring Security, sem controller/resolver/repository de authorization request customizados, sem expor exchange, conclusão de cadastro Google ou callback customizado em controller
+- [X] T046 [US2] Implementar confirmação idempotente, URL WhatsApp e criação transacional do trio em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/InterestService.kt`
+- [X] T047 [P] [US2] Adicionar DTO HAL do interesse em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/dtos/InterestDtos.kt`
+- [X] T048 [US2] Implementar `POST /products/{productId}/interests` com Location e links de produto/WhatsApp em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/InterestController.kt`
 
 **Checkpoint**: fluxo comercial principal funciona de catálogo a WhatsApp sem implementar venda.
 
@@ -140,7 +140,7 @@ principal/ordem e status; catálogo reflete o estado e falha externa não public
 
 ### Implementation for User Story 3
 
-- [ ] T052 [US3] Completar criação/resolução exclusiva da ADMIN configurada em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/GoogleAuthService.kt`
+- [ ] T052 [US3] Validar e aplicar a autenticação ADMIN já implementada na Phase 4 aos fluxos administrativos do catálogo, sem duplicar a resolução de identidade Google ou alterar `GoogleAuthService`
 - [ ] T053 [P] [US3] Definir a pequena interface `MediaStorage` e resultado neutro do provedor em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/MediaStorage.kt`
 - [ ] T054 [P] [US3] Implementar integração Cloudinary sem vazar tipos do SDK em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/cloudinary/CloudinaryMediaStorage.kt`
 - [ ] T055 [US3] Adicionar gestão de categorias/produtos e invariantes ao service coeso em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`

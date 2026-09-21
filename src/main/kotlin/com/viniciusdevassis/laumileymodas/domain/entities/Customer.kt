@@ -29,8 +29,8 @@ class Customer(
 	@Column(nullable = false, length = 120)
 	var lastName: String,
 
-	@Column(nullable = false, length = 20)
-	var whatsappPhone: String,
+	@Column(length = 20)
+	var whatsappPhone: String? = null,
 
 	@Column(nullable = false)
 	var proactiveContactAuthorized: Boolean = false,
@@ -50,6 +50,6 @@ class Customer(
 	init {
 		require(firstName.isNotBlank()) { "Cliente deve possuir nome." }
 		require(lastName.isNotBlank()) { "Cliente deve possuir sobrenome." }
-		require(whatsappPhone.isNotBlank()) { "Cliente deve possuir WhatsApp." }
+		require(whatsappPhone?.isNotBlank() != false) { "WhatsApp não pode ficar em branco." }
 	}
 }

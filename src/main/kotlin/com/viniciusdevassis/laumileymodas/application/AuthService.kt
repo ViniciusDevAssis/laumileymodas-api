@@ -14,7 +14,10 @@ import com.viniciusdevassis.laumileymodas.infrastructure.security.RefreshTokenCo
 import com.viniciusdevassis.laumileymodas.infrastructure.security.TokenService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.authentication.AuthenticationManager
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.AuthenticationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -30,11 +33,12 @@ class AuthService(
 	private val tokenService: TokenService,
 	private val refreshTokenCookie: RefreshTokenCookie,
 	private val rateLimiter: AuthenticationRateLimiter,
+	private val authenticationManager: AuthenticationManager,
+	private val passwordEncoder: PasswordEncoder,
 	private val clock: Clock,
 	@Value("\${laumiley.security.jwt.refresh-token-ttl}") private val refreshTokenTtl: Duration,
+	@Value("\${laumiley.security.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
 ) {
-	private val passwordEncoder = BCryptPasswordEncoder(BCRYPT_STRENGTH)
-
 	@Transactional
 	fun registerCustomer(
 		firstName: String,
@@ -67,22 +71,51 @@ class AuthService(
 		)
 	}
 
+	@Transactional(readOnly = true)
+	fun getCustomer(accountId: UUID): Customer {
+		val customer = customerRepository.findByAccountId(accountId)
+			?: throw ApiException(ApiError.CUSTOMER_001, HttpStatus.NOT_FOUND)
+		customer.account.email
+		return customer
+	}
+
 	@Transactional
-	fun login(email: String, password: String): AuthTokens {
+	fun updateCustomerWhatsApp(accountId: UUID, whatsappPhone: String): Customer {
+		val customer = customerRepository.findByAccountId(accountId)
+			?: throw ApiException(ApiError.CUSTOMER_001, HttpStatus.NOT_FOUND)
+		customer.whatsappPhone = whatsappPhone.trim()
+		customer.updatedAt = now()
+		customer.account.email
+		return customer
+	}
+
+	@Transactional
+	fun login(email: String, password: String, origin: String): AuthTokens {
 		val normalizedEmail = Account.normalizeEmail(email)
-		if (rateLimiter.isBlocked(normalizedEmail)) {
+		val rateLimitKey = rateLimitKey(origin, normalizedEmail)
+		if (rateLimiter.isBlocked(rateLimitKey)) {
 			throw ApiException(ApiError.AUTH_004, HttpStatus.TOO_MANY_REQUESTS)
 		}
 
-		val account = accountRepository.findByEmail(normalizedEmail)
-		if (account?.passwordHash == null || !passwordEncoder.matches(password, account.passwordHash)) {
-			rateLimiter.recordFailure(normalizedEmail)
+		val account = try {
+			authenticationManager.authenticate(UsernamePasswordAuthenticationToken(normalizedEmail, password))
+				.principal.let { principal ->
+					accountRepository.findByEmail((principal as org.springframework.security.core.userdetails.UserDetails).username)
+				}
+		} catch (exception: AuthenticationException) {
+			null
+		}
+		if (account == null) {
+			rateLimiter.recordFailure(rateLimitKey)
 			throw ApiException(ApiError.AUTH_002, HttpStatus.UNAUTHORIZED)
 		}
 
-		rateLimiter.recordSuccess(normalizedEmail)
+		rateLimiter.recordSuccess(rateLimitKey)
 		return issueTokens(account, UUID.randomUUID())
 	}
+
+	@Transactional
+	fun createRefreshTokenFor(account: Account): String = createRefreshToken(account, UUID.randomUUID())
 
 	@Transactional(noRollbackFor = [ApiException::class])
 	fun refresh(rawRefreshToken: String): AuthTokens {
@@ -110,6 +143,17 @@ class AuthService(
 	}
 
 	private fun issueTokens(account: Account, familyId: UUID): AuthTokens {
+		val rawRefreshToken = createRefreshToken(account, familyId)
+
+		return AuthTokens(
+			accessToken = tokenService.createAccessToken(requireNotNull(account.id), account.role),
+			refreshToken = rawRefreshToken,
+			role = account.role,
+			expiresIn = accessTokenTtl.seconds,
+		)
+	}
+
+	private fun createRefreshToken(account: Account, familyId: UUID): String {
 		val rawRefreshToken = refreshTokenCookie.generateToken()
 		refreshTokenRepository.save(
 			RefreshToken(
@@ -120,12 +164,11 @@ class AuthService(
 				createdAt = now(),
 			),
 		)
-
-		return AuthTokens(
-			accessToken = tokenService.createAccessToken(requireNotNull(account.id), account.role),
-			refreshToken = rawRefreshToken,
-		)
+		return rawRefreshToken
 	}
+
+	private fun rateLimitKey(origin: String, normalizedEmail: String): String =
+		"${origin.trim().lowercase()}|$normalizedEmail"
 
 	private fun findRefreshToken(rawRefreshToken: String): RefreshToken =
 		refreshTokenRepository.findByTokenHash(refreshTokenCookie.hash(rawRefreshToken))
@@ -144,9 +187,8 @@ class AuthService(
 	data class AuthTokens(
 		val accessToken: String,
 		val refreshToken: String,
+		val role: Role,
+		val expiresIn: Long,
 	)
 
-	companion object {
-		private const val BCRYPT_STRENGTH = 12
-	}
 }

@@ -35,7 +35,6 @@ $env:LAUMILEY_ADMIN_GOOGLE_SUB='<sub-da-conta-google-da-loja>'
 
 $env:LAUMILEY_FRONTEND_ALLOWED_ORIGINS='http://localhost:3000'
 $env:LAUMILEY_FRONTEND_AUTH_SUCCESS_URL='http://localhost:3000/auth/google/success'
-$env:LAUMILEY_FRONTEND_REGISTRATION_URL='http://localhost:3000/auth/google/complete-registration'
 $env:LAUMILEY_FRONTEND_AUTH_ERROR_URL='http://localhost:3000/auth/google/error'
 $env:LAUMILEY_COOKIE_SECURE='false'
 $env:LAUMILEY_COOKIE_SAME_SITE='Lax'
@@ -126,8 +125,12 @@ $bearer=@{Authorization="Bearer $($auth.accessToken)";Accept='application/hal+js
 Resultado esperado: cadastro `201` com `Location`, papel sempre `CLIENT`, login `200`, access token
 JWT no corpo e refresh opaco somente em cookie `HttpOnly`. O consentimento começa desautorizado.
 
-Cadastros que incluam papel administrativo são rejeitados. Cliente recebe `403` em `/admin/**`.
+O cadastro público cria sempre `CLIENT`; um campo `role` enviado pelo cliente não concede privilégios.
+Cliente recebe `403` em `/admin/**`.
 Falhas repetidas de login chegam a `429`; tentativas válidas normais não são bloqueadas.
+
+Um cliente Google pode informar depois o telefone/WhatsApp do próprio perfil com
+`PUT /customers/me/whatsapp`, usando o access token Bearer e um telefone E.164.
 
 ## 6. Inicialize CSRF e valide refresh/logout
 
@@ -159,14 +162,17 @@ http://localhost:8080/api/v1/oauth2/authorization/google
 Valide separadamente:
 
 1. cliente cujo `sub` já está vinculado;
-2. novo cliente Google, que retorna à rota configurada para completar nome, sobrenome e WhatsApp;
+2. novo cliente Google, que cria a conta e o perfil a partir do perfil OIDC; o telefone/WhatsApp pode ser informado depois;
 3. e-mail já existente com `sub` Google ainda não vinculado, que deve ir para erro sem linking;
 4. conta cujo `sub` difere de `LAUMILEY_ADMIN_GOOGLE_SUB`, que segue sempre como CLIENT;
 5. conta cujo `sub` coincide com a configuração, que autentica a única ADMIN.
 
 O Spring Security gera a authorization request e processa o callback padrão
-`/api/v1/login/oauth2/code/google`. O success handler apenas resolve o comportamento local, cria
-refresh token opaco em cookie `HttpOnly` e redireciona para URL fixa do frontend. Depois do redirect, o frontend chama `POST /auth/refresh` com cookie e CSRF para obter o access token. Access token, refresh token e identidade Google não aparecem na URL.
+`/api/v1/login/oauth2/code/google`. O success handler resolve ou cria a conta pelo `sub`, cria o
+perfil CLIENT com o telefone opcional, configura o refresh token opaco em cookie `HttpOnly` e
+redireciona para a URL fixa de sucesso do frontend. Depois do redirect, o frontend chama
+`POST /auth/refresh` com cookie e CSRF para obter o access token. Access token, refresh token e
+identidade Google não aparecem na URL.
 
 ## 8. Valide consentimento
 

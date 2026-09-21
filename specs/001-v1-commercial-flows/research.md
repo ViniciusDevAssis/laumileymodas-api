@@ -198,6 +198,10 @@ quando o `sub` já está vinculado. Um novo `sub` de cliente sem Account inicia 
 já pertence a Account sem aquele vínculo, o fluxo é rejeitado; não há linking automático nem manual
 na V1. E-mail nunca concede ou confirma papel ADMIN.
 
+No cadastro Google, nome e e-mail verificado vêm do perfil OIDC. O telefone/WhatsApp é opcional nesse
+fluxo e pode ser informado posteriormente pelo próprio cliente autenticado; no cadastro tradicional
+continua obrigatório. V4 altera a nulabilidade sem reescrever V2 já aplicada.
+
 Após o Spring concluir o callback, um success handler executa somente o comportamento local. Ele resolve ou cria Account/AccountExternalIdentity pelo `sub`, emite refresh token opaco em cookie `HttpOnly` e redireciona somente para URL fixa configurada. Depois do redirect, o frontend chama `POST /auth/refresh` com cookie e CSRF para obter o access token. Tokens sensíveis nunca aparecem na URL.
 
 O mecanismo padrão de authorization request pode usar uma sessão HTTP temporária para correlacionar
@@ -226,7 +230,8 @@ publicação.
 ## 12. Rate limiting
 
 **Decision**: implementar um limitador em memória para tentativas falhas de autenticação, adequado à
-única instância da V1. A chave combina origem e identificador normalizado sem registrar senha. Uma
+única instância da V1. A chave combina o endereço de origem da requisição e o e-mail normalizado,
+sem registrar senha. O controller obtém a origem e a passa ao AuthService. Uma
 autenticação bem-sucedida limpa o contador aplicável; excesso retorna `429` no mesmo
 `ApiErrorResponse`.
 

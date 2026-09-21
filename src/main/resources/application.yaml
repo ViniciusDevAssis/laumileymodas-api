@@ -37,7 +37,6 @@ laumiley:
   frontend:
     allowed-origins: ${LAUMILEY_FRONTEND_ALLOWED_ORIGINS:http://localhost:3000}
     auth-success-url: ${LAUMILEY_FRONTEND_AUTH_SUCCESS_URL:http://localhost:3000/auth/google/success}
-    registration-url: ${LAUMILEY_FRONTEND_REGISTRATION_URL:http://localhost:3000/auth/google/complete-registration}
     auth-error-url: ${LAUMILEY_FRONTEND_AUTH_ERROR_URL:http://localhost:3000/auth/google/error}
   security:
     admin:
