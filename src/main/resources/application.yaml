@@ -42,7 +42,7 @@ laumiley:
     admin:
       google-sub: ${LAUMILEY_ADMIN_GOOGLE_SUB:}
     jwt:
-      secret: ${LAUMILEY_JWT_SECRET:}
+      secret: ${LAUMILEY_JWT_SECRET:laumiley-dev-secret-2026-super-seguro-123456}
       issuer: ${LAUMILEY_JWT_ISSUER:laumiley-modas-api}
       audience: ${LAUMILEY_JWT_AUDIENCE:laumiley-api}
       access-token-ttl: ${LAUMILEY_ACCESS_TOKEN_TTL:15m}
@@ -58,4 +58,4 @@ laumiley:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
   whatsapp:
-    number: ${LAUMILEY_WHATSAPP_NUMBER:}
+    number: ${LAUMILEY_WHATSAPP_NUMBER:75999322953}
