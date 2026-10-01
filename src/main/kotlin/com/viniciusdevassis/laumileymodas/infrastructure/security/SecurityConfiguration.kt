@@ -63,7 +63,7 @@ class SecurityConfiguration(
 			.csrf {
 				it.csrfTokenRepository(csrfRepository)
 				it.csrfTokenRequestHandler(CsrfTokenRequestAttributeHandler())
-				it.ignoringRequestMatchers("/auth/login", "/customers", "/customers/me/whatsapp", "/products/*/interests")
+				it.ignoringRequestMatchers("/auth/login", "/customers", "/customers/me/whatsapp", "/products/*/interests", "/admin/**")
 			}
 			.cors { }
 			.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }

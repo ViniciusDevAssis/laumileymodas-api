@@ -134,18 +134,18 @@ principal/ordem e status; catálogo reflete o estado e falha externa não public
 
 ### Tests for User Story 3
 
-- [ ] T049 [P] [US3] Testar Google ADMIN exclusivamente por sub autorizado, tratamento dos demais como CLIENT e impossibilidade de promoção pública em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminAuthenticationIntegrationTest.kt`
-- [ ] T050 [P] [US3] Testar matriz anônimo/CLIENT/ADMIN e contrato HAL da gestão do catálogo em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminCatalogIntegrationTest.kt`
-- [ ] T051 [P] [US3] Testar upload, exclusão, compensação de falha e invariantes de imagem com fake MediaStorage em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/ProductMediaIntegrationTest.kt`
+- [X] T049 [P] [US3] Testar Google ADMIN exclusivamente por sub autorizado, tratamento dos demais como CLIENT e impossibilidade de promoção pública em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminAuthenticationIntegrationTest.kt`
+- [X] T050 [P] [US3] Testar matriz anônimo/CLIENT/ADMIN e contrato HAL da gestão do catálogo em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/AdminCatalogIntegrationTest.kt`
+- [X] T051 [P] [US3] Testar upload, exclusão, compensação de falha e invariantes de imagem com fake MediaStorage em `src/test/kotlin/com/viniciusdevassis/laumileymodas/integration/ProductMediaIntegrationTest.kt`
 
 ### Implementation for User Story 3
 
-- [ ] T052 [US3] Validar e aplicar a autenticação ADMIN já implementada na Phase 4 aos fluxos administrativos do catálogo, sem duplicar a resolução de identidade Google ou alterar `GoogleAuthService`
-- [ ] T053 [P] [US3] Definir a pequena interface `MediaStorage` e resultado neutro do provedor em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/MediaStorage.kt`
-- [ ] T054 [P] [US3] Implementar integração Cloudinary sem vazar tipos do SDK em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/cloudinary/CloudinaryMediaStorage.kt`
-- [ ] T055 [US3] Adicionar gestão de categorias/produtos e invariantes ao service coeso em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
-- [ ] T056 [US3] Implementar coordenação de upload/exclusão e compensação simples em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/ProductMediaService.kt`
-- [ ] T057 [US3] Implementar recursos administrativos REST/HAL de categoria, produto e imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AdminCatalogController.kt`
+- [X] T052 [US3] Validar e aplicar a autenticação ADMIN já implementada na Phase 4 aos fluxos administrativos do catálogo, sem duplicar a resolução de identidade Google ou alterar `GoogleAuthService`
+- [X] T053 [P] [US3] Definir a pequena interface `MediaStorage` e resultado neutro do provedor em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/MediaStorage.kt`
+- [X] T054 [P] [US3] Implementar integração Cloudinary sem vazar tipos do SDK em `src/main/kotlin/com/viniciusdevassis/laumileymodas/infrastructure/cloudinary/CloudinaryMediaStorage.kt`
+- [X] T055 [US3] Adicionar gestão de categorias/produtos e invariantes ao service coeso em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/CatalogService.kt`
+- [X] T056 [US3] Implementar coordenação de upload/exclusão e compensação simples em `src/main/kotlin/com/viniciusdevassis/laumileymodas/application/ProductMediaService.kt`
+- [X] T057 [US3] Implementar recursos administrativos REST/HAL de categoria, produto e imagem em `src/main/kotlin/com/viniciusdevassis/laumileymodas/presentation/controllers/AdminCatalogController.kt`
 
 **Checkpoint**: administração completa do catálogo funciona sem expor Cloudinary ao frontend.
 

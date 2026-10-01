@@ -1,6 +1,7 @@
 package com.viniciusdevassis.laumileymodas.presentation.dtos
 
 import com.viniciusdevassis.laumileymodas.domain.enums.ProductStatus
+import org.springframework.hateoas.RepresentationModel
 import org.springframework.hateoas.server.core.Relation
 import java.util.UUID
 
@@ -15,7 +16,7 @@ data class ProductImageRepresentation(
 	val url: String,
 	val primary: Boolean,
 	val displayOrder: Int,
-)
+) : RepresentationModel<ProductImageRepresentation>()
 
 @Relation(collectionRelation = "products", itemRelation = "product")
 data class ProductRepresentation(

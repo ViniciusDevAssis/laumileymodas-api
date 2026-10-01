@@ -62,6 +62,24 @@ class Product(
 		imageList.add(image)
 	}
 
+	fun removeImage(image: ProductImage) {
+		require(imageList.remove(image)) { "Imagem não pertence ao produto." }
+	}
+
+	fun setPrimaryImage(image: ProductImage) {
+		require(imageList.contains(image)) { "Imagem não pertence ao produto." }
+		imageList.forEach { it.primary = it === image }
+	}
+
+	fun replaceDetails(name: String, description: String, category: Category, updatedAt: Instant) {
+		require(name.isNotBlank()) { "Produto deve possuir nome." }
+		require(description.isNotBlank()) { "Produto deve possuir descrição." }
+		this.name = name.trim()
+		this.description = description.trim()
+		this.category = category
+		this.updatedAt = updatedAt
+	}
+
 	fun orderedImages(): List<ProductImage> =
 		images.sortedWith(compareByDescending<ProductImage> { it.primary }.thenBy { it.displayOrder })
 

@@ -46,18 +46,19 @@ class CatalogController(
 				description = description,
 				category = CategorySummary(requireNotNull(category.id), category.name),
 				status = status,
-				images = orderedImages().map { it.toRepresentation() },
+				images = orderedImages().map { it.toRepresentation(requireNotNull(id)) },
 			),
 		).apply {
 			add(linkTo(methodOn(CatalogController::class.java).getProduct(requireNotNull(id))).withSelfRel())
 			add(linkTo(methodOn(CatalogController::class.java).listProducts(null, Pageable.unpaged())).withRel(IanaLinkRelations.COLLECTION))
 		}
 
-	private fun ProductImage.toRepresentation(): ProductImageRepresentation =
+	private fun ProductImage.toRepresentation(productId: UUID): ProductImageRepresentation =
 		ProductImageRepresentation(
 			id = requireNotNull(id),
 			url = url,
 			primary = primary,
 			displayOrder = displayOrder,
-		)
+		).add(linkTo(methodOn(CatalogController::class.java).getProduct(productId)).withRel("product"))
+			.add(org.springframework.hateoas.Link.of(url, org.springframework.hateoas.IanaLinkRelations.SELF))
 }

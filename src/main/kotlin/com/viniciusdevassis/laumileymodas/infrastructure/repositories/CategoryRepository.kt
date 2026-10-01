@@ -6,4 +6,6 @@ import org.springframework.stereotype.Repository
 import java.util.UUID
 
 @Repository
-interface CategoryRepository : JpaRepository<Category, UUID>
+interface CategoryRepository : JpaRepository<Category, UUID> {
+	fun findByNormalizedName(normalizedName: String): Category?
+}

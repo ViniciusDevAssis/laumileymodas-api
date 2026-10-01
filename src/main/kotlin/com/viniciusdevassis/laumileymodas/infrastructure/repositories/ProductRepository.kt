@@ -16,6 +16,21 @@ import java.util.UUID
 @Repository
 interface ProductRepository : JpaRepository<Product, UUID> {
 	@EntityGraph(attributePaths = ["category"])
+	fun findAllByStatus(status: ProductStatus, pageable: Pageable): Page<Product>
+
+	@EntityGraph(attributePaths = ["category"])
+	@Query("select p from Product p")
+	fun findAllWithDetails(pageable: Pageable): Page<Product>
+
+	@EntityGraph(attributePaths = ["category", "imageList"])
+	fun findWithDetailsById(id: UUID): Product?
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@EntityGraph(attributePaths = ["category", "imageList"])
+	@Query("select p from Product p where p.id = :id")
+	fun findWithDetailsByIdForUpdate(@Param("id") id: UUID): Product?
+
+	@EntityGraph(attributePaths = ["category"])
 	fun findByStatus(status: ProductStatus, pageable: Pageable): Page<Product>
 
 	@EntityGraph(attributePaths = ["category"])

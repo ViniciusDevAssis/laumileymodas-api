@@ -62,13 +62,19 @@ class InterestController(
 		description = description,
 		category = CategorySummary(requireNotNull(category.id), category.name),
 		status = status,
-		images = orderedImages().map { it.toRepresentation() },
+		images = orderedImages().map { it.toRepresentation(requireNotNull(id)) },
 	)
 
-	private fun ProductImage.toRepresentation() = ProductImageRepresentation(
+	private fun ProductImage.toRepresentation(productId: UUID) = ProductImageRepresentation(
 		id = requireNotNull(id),
 		url = url,
 		primary = primary,
 		displayOrder = displayOrder,
-	)
+	).add(Link.of(url, "self"))
+		.add(linkToProduct(productId))
+
+	private fun linkToProduct(productId: UUID) =
+		org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo(
+			org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn(CatalogController::class.java).getProduct(productId),
+		).withRel("product")
 }
